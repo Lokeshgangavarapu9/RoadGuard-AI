@@ -1,7 +1,8 @@
 # ==============================================================================
 # RoadGuard AI — Production Dockerfile for Spring Boot + ONNX Runtime
 # ==============================================================================
-# NOTE: Uses Ubuntu/Debian-based glibc runtime (eclipse-temurin:21-jre-jammy)
+# NOTE: Build context is repository root (.)
+# Uses Ubuntu/Debian-based glibc runtime (eclipse-temurin:21-jre-jammy)
 # because Microsoft ONNX Runtime Java native libraries (libonnxruntime4j_jni.so)
 # require glibc and will fail on Alpine (musl libc).
 # ==============================================================================
@@ -13,13 +14,13 @@ FROM eclipse-temurin:21-jdk-jammy AS builder
 
 WORKDIR /build
 
-# Copy Maven wrapper and POM first to leverage Docker layer caching for dependencies
-COPY .mvn .mvn
-COPY mvnw pom.xml ./
+# Copy Maven wrapper and POM from roadguard-backend relative to repository root
+COPY roadguard-backend/.mvn .mvn
+COPY roadguard-backend/mvnw roadguard-backend/pom.xml ./
 RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
 
 # Copy source code and package application
-COPY src ./src
+COPY roadguard-backend/src ./src
 RUN ./mvnw clean package -DskipTests -B
 
 # ------------------------------------------------------------------------------
@@ -33,18 +34,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 WORKDIR /app
 
-# Create directories for models and persistent evidence uploads
+# Create directories for models and evidence uploads
 RUN mkdir -p /app/models /app/uploads/evidence
 
 # Copy built Spring Boot fat JAR from builder
 COPY --from=builder /build/target/*.jar /app/app.jar
 
-# Copy ONNX model weights
-COPY models/ /app/models/
+# Copy ONNX model weights from roadguard-backend relative to repository root
+COPY roadguard-backend/models/ /app/models/
 
 # Default Environment Variables (overridable at container launch)
 ENV PORT=8080 \
     ROADGUARD_MODEL_PATH=/app/models/road_damage_yolo.onnx \
+    ONNX_MODEL_PATH=/app/models/road_damage_yolo.onnx \
     ROADGUARD_UPLOAD_DIR=/app/uploads/evidence \
     SPRING_FLYWAY_ENABLED=true \
     H2_CONSOLE_ENABLED=false

@@ -94,14 +94,19 @@ The backend uses **Microsoft ONNX Runtime Java** (`onnxruntime4j_jni.so`) to run
 
 ### 3.2 Recommended Hosting Providers
 
-#### Option A: Render (Recommended Blueprint)
-A ready-to-use `render.yaml` is provided in the repository root.
+#### Option A: Render (Free Tier Blueprint)
+A ready-to-use `render.yaml` is provided in the repository root configured for Render's **Free Tier**.
 1. Connect your GitHub account to [Render](https://render.com).
 2. Click **New +** &rarr; **Blueprint**.
 3. Select `RoadGuard-AI`.
 4. Render will automatically provision:
-   - A managed **PostgreSQL** instance (`roadguard-postgres`)
-   - A Docker web service (`roadguard-backend`) with dynamic `$PORT` and persistent disk storage for evidence photos.
+   - A free managed **PostgreSQL** instance (`roadguard-postgres`)
+   - A free Docker web service (`roadguard-backend`) with dynamic `$PORT` binding and health check at `/api/v1/health`.
+   - Build context configured at repository root (`.`) using `./roadguard-backend/Dockerfile`.
+
+> [!NOTE]
+> **Render Free Plan Storage Limitations**:
+> Render's Free tier does not support attached persistent disks. Evidence image uploads will be stored on the container's local filesystem (`/app/uploads/evidence`). While all journeys, telemetry, GPS coordinates, and defect metadata persist permanently in the PostgreSQL database, raw photograph files on the ephemeral filesystem reset when Render spins down the free container due to inactivity. For persistent image files across restarts without a paid disk, an external object store (S3/Cloudflare R2/GCS) can be configured.
 
 #### Option B: Railway
 1. Create a new project on [Railway](https://railway.app).
@@ -126,10 +131,10 @@ A ready-to-use `render.yaml` is provided in the repository root.
    ```
 
 ### 3.3 Backend Dockerfile Architecture
-The `roadguard-backend/Dockerfile` includes:
-- **Build Stage**: Eclipse Temurin 21 JDK + Maven dependency caching.
+The `roadguard-backend/Dockerfile` is built with repository-root context (`.`):
+- **Build Stage**: Eclipse Temurin 21 JDK + Maven dependency caching copying `roadguard-backend/pom.xml` and `roadguard-backend/src`.
 - **Runtime Stage**: Eclipse Temurin 21 JRE Jammy (Ubuntu-based glibc).
-- **Model Included**: Copies `models/road_damage_yolo.onnx` (36.1 MB) into `/app/models/`.
+- **Model Included**: Copies `roadguard-backend/models/road_damage_yolo.onnx` (36.1 MB) into `/app/models/`.
 - **Health Check**: Native `curl -f http://localhost:${PORT:-8080}/api/v1/health`.
 - **JVM Flags**: Runs with `--add-opens=java.base/java.lang=ALL-UNNAMED` for modern Java reflection.
 
@@ -153,12 +158,13 @@ SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
 SPRING_FLYWAY_ENABLED=true
 SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
 ```
-The application includes `org.postgresql:postgresql` and `flyway-database-postgresql` drivers. Flyway will automatically run baseline migrations on startup.
+The application includes `org.postgresql:postgresql` and `flyway-database-postgresql` drivers. In addition, `DatabaseConfig` automatically normalizes cloud URI formats (`postgres://...` or `postgresql://...`) into valid JDBC URLs on startup. Flyway will automatically run baseline migrations.
 
-### 4.3 Evidence Storage Volume
+### 4.3 Evidence Storage Volume & Limitations
 Road defect complaint verification requires high-resolution camera images.
-- Local uploads are written to `ROADGUARD_UPLOAD_DIR` (default: `/app/uploads/evidence`).
-- Mount a persistent volume to `/app/uploads` on your hosting provider so that uploaded images survive container redeployments.
+- Uploads are written to `ROADGUARD_UPLOAD_DIR` (default: `/app/uploads/evidence`).
+- On free-tier cloud containers (Render Free), local storage is ephemeral and resets on restart. Journey and defect metadata remain safe in PostgreSQL.
+- On platforms supporting persistent disks (Render Starter with disk, or Railway), mount a persistent volume at `/app/uploads` to preserve photos across redeployments.
 
 ---
 

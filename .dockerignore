@@ -1,0 +1,8 @@
+roadguard-frontend/
+roadguard-backend/target/
+roadguard-backend/uploads/
+uploads/
+test-images/
+.git
+.idea/
+*.log

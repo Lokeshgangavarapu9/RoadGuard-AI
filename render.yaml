@@ -6,13 +6,9 @@ services:
     name: roadguard-backend
     runtime: docker
     dockerfilePath: ./roadguard-backend/Dockerfile
-    dockerContext: ./roadguard-backend
-    plan: starter
+    dockerContext: .
+    plan: free
     healthCheckPath: /api/v1/health
-    disk:
-      name: roadguard-evidence-storage
-      mountPath: /app/uploads
-      sizeGB: 10
     envVars:
       - key: PORT
         value: 8080
@@ -20,6 +16,14 @@ services:
         fromDatabase:
           name: roadguard-postgres
           property: connectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: roadguard-postgres
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: roadguard-postgres
+          property: password
       - key: SPRING_DATASOURCE_DRIVER_CLASS_NAME
         value: org.postgresql.Driver
       - key: SPRING_JPA_DATABASE_PLATFORM
