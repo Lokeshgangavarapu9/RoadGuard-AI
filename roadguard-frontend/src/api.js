@@ -1,4 +1,19 @@
-const API_BASE = '/api/v1';
+// Configurable backend URL: uses VITE_API_BASE_URL in production (e.g. on Vercel),
+// or empty string in local development (falling back to Vite proxy at /api/v1).
+export const BACKEND_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api/v1` : '/api/v1';
+
+/**
+ * Resolves an asset path (e.g. /uploads/... evidence images) to a full URL in production.
+ */
+export function getAssetUrl(path) {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+    return path;
+  }
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return BACKEND_URL ? `${BACKEND_URL}${cleanPath}` : cleanPath;
+}
 
 export async function getHealth() {
   const res = await fetch(`${API_BASE}/health`);
@@ -67,12 +82,23 @@ export async function uploadEvidenceFrame(journeyId, file, { latitude, longitude
     body: formData,
   });
   if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const frame = await res.json();
+  if (frame && frame.storageUrl) {
+    frame.storageUrl = getAssetUrl(frame.storageUrl);
+  }
+  return frame;
 }
 
 export async function getJourneyFrames(journeyId) {
   const res = await fetch(`${API_BASE}/journeys/${journeyId}/frames`);
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data)) {
+    return data.map((f) => ({
+      ...f,
+      storageUrl: getAssetUrl(f.storageUrl),
+    }));
+  }
+  return data;
 }
 
 export async function listIssues(journeyId = null) {

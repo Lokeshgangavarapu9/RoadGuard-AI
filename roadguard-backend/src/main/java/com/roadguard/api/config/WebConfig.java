@@ -27,6 +27,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addCorsMappings(org.springframework.web.servlet.config.annotation.CorsRegistry registry) {
         registry.addMapping("/api/**")
                 .allowedOrigins(allowedOrigins)
+                .allowedOriginPatterns("https://*.vercel.app")
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers")
                 .exposedHeaders("Content-Disposition", "X-Request-Id")
@@ -35,6 +36,7 @@ public class WebConfig implements WebMvcConfigurer {
 
         registry.addMapping("/uploads/**")
                 .allowedOrigins(allowedOrigins)
+                .allowedOriginPatterns("https://*.vercel.app")
                 .allowedMethods("GET", "OPTIONS")
                 .allowedHeaders("Authorization", "Content-Type", "Accept", "Origin")
                 .allowCredentials(true)

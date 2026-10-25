@@ -48,9 +48,11 @@ dist-ssr/
 .idea/
 *.iml
 
-# RoadGuard AI Data & Models (Keep large weights out of git)
+# RoadGuard AI Data & Models
 models/*.onnx
 roadguard-backend/models/*.onnx
+!roadguard-backend/models/road_damage_yolo.onnx
 uploads/
 roadguard-backend/uploads/
 test-images/
+

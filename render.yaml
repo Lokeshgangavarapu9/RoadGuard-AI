@@ -1,0 +1,47 @@
+services:
+  # ----------------------------------------------------------------------------
+  # RoadGuard AI — Spring Boot 3.3.5 Backend + ONNX Runtime Service
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: roadguard-backend
+    runtime: docker
+    dockerfilePath: ./roadguard-backend/Dockerfile
+    dockerContext: ./roadguard-backend
+    plan: starter
+    healthCheckPath: /api/v1/health
+    disk:
+      name: roadguard-evidence-storage
+      mountPath: /app/uploads
+      sizeGB: 10
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: roadguard-postgres
+          property: connectionString
+      - key: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+        value: org.postgresql.Driver
+      - key: SPRING_JPA_DATABASE_PLATFORM
+        value: org.hibernate.dialect.PostgreSQLDialect
+      - key: SPRING_FLYWAY_ENABLED
+        value: true
+      - key: SPRING_FLYWAY_BASELINE_ON_MIGRATE
+        value: true
+      - key: ROADGUARD_CORS_ALLOWED_ORIGINS
+        value: https://*.vercel.app,http://localhost:5173
+      - key: ROADGUARD_UPLOAD_DIR
+        value: /app/uploads/evidence
+      - key: ROADGUARD_MODEL_PATH
+        value: /app/models/road_damage_yolo.onnx
+      - key: H2_CONSOLE_ENABLED
+        value: false
+
+# ------------------------------------------------------------------------------
+# Managed PostgreSQL Database for Journey & Evidence Metadata Persistence
+# ------------------------------------------------------------------------------
+databases:
+  - name: roadguard-postgres
+    plan: free
+    databaseName: roadguard
+    user: roadguard_admin

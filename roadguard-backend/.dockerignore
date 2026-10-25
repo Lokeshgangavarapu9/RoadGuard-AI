@@ -1,0 +1,8 @@
+target/
+uploads/
+*.log
+.git
+.gitignore
+.idea/
+*.iml
+test-images/
