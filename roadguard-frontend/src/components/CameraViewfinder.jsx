@@ -244,15 +244,33 @@ export default function CameraViewfinder({
         const currentSeq = frameSeqRef.current++;
         const file = new File([blob], `frame_${currentSeq}.jpg`, { type: 'image/jpeg' });
 
+        // Compute SHA-256 cryptographic digest of captured frame
+        let clientSha256 = null;
+        try {
+          const arrayBuffer = await blob.arrayBuffer();
+          const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          clientSha256 = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+        } catch (hashErr) {
+          console.warn('WebCrypto SHA-256 unavailable:', hashErr);
+        }
+
         const lat = currentLocation?.lat;
         const lon = currentLocation?.lon;
+        const accuracy = currentLocation?.accuracy;
+        const heading = currentLocation?.heading;
+        const speed = currentLocation?.speed;
 
-        // Upload genuine frame to backend ONNX pipeline
+        // Upload genuine frame to backend ONNX pipeline with verified telemetry
         const resp = await uploadEvidenceFrame(journeyId, file, {
           latitude: lat,
           longitude: lon,
           capturedAt: new Date().toISOString(),
-          frameSequence: currentSeq
+          frameSequence: currentSeq,
+          gpsAccuracy: accuracy,
+          heading: heading,
+          speed: speed,
+          clientSha256: clientSha256
         });
 
         setLastUploadedFrame(resp);

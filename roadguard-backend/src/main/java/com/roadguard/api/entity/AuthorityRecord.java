@@ -37,10 +37,13 @@ public class AuthorityRecord {
 
     // ── Getters ──
     public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     public String getDeptCode() { return deptCode; }
     public void setDeptCode(String deptCode) { this.deptCode = deptCode; }
     public String getDeptName() { return deptName; }
     public void setDeptName(String deptName) { this.deptName = deptName; }
+    public String getName() { return deptName; }
+    public void setName(String name) { this.deptName = name; }
     public String getJurisdiction() { return jurisdiction; }
     public void setJurisdiction(String jurisdiction) { this.jurisdiction = jurisdiction; }
     public String getPortalUrl() { return portalUrl; }

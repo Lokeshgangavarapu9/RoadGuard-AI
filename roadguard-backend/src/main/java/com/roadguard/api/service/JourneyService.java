@@ -169,6 +169,22 @@ public class JourneyService {
         Instant capturedAt,
         Integer frameSequence
     ) throws IOException {
+        return uploadEvidenceFrame(journeyId, file, latitude, longitude, capturedAt, frameSequence, null, null, null, null);
+    }
+
+    @Transactional
+    public EvidenceFrameResponse uploadEvidenceFrame(
+        Long journeyId,
+        MultipartFile file,
+        Double latitude,
+        Double longitude,
+        Instant capturedAt,
+        Integer frameSequence,
+        Double accuracy,
+        Double heading,
+        Double speed,
+        String clientSha256
+    ) throws IOException {
         Journey journey = journeyRepository.findById(journeyId)
             .orElseThrow(() -> new IllegalArgumentException("Journey not found: " + journeyId));
 
@@ -184,10 +200,13 @@ public class JourneyService {
         frame.setOriginalFilename(meta.originalFilename);
         frame.setContentType(meta.contentType);
         frame.setFileSizeBytes(meta.fileSizeBytes);
-        frame.setSha256Digest(meta.sha256Digest);
+        frame.setSha256Digest(clientSha256 != null && !clientSha256.isBlank() ? clientSha256 : meta.sha256Digest);
         frame.setPiiProcessed(meta.piiProcessed);
         frame.setLatitude(latitude);
         frame.setLongitude(longitude);
+        frame.setGpsAccuracyM(accuracy);
+        frame.setHeadingDeg(heading);
+        frame.setSpeedMps(speed);
         frame.setCapturedAt(capturedAt != null ? capturedAt : Instant.now());
         frame.setSourceType(journey.getDemoMode() ? EvidenceFrame.SourceType.PRERECORDED : EvidenceFrame.SourceType.LIVE_CAMERA);
         frame.setFrameSequence(frameSequence != null ? frameSequence : (journey.getTotalFrames() + 1));

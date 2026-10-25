@@ -104,13 +104,21 @@ export async function getJourneyGps(journeyId) {
   return res.json();
 }
 
-export async function uploadEvidenceFrame(journeyId, file, { latitude, longitude, capturedAt, frameSequence }) {
+export async function uploadEvidenceFrame(
+  journeyId,
+  file,
+  { latitude, longitude, capturedAt, frameSequence, gpsAccuracy, heading, speed, clientSha256 } = {}
+) {
   const formData = new FormData();
   formData.append('file', file);
   if (latitude != null) formData.append('latitude', latitude);
   if (longitude != null) formData.append('longitude', longitude);
   if (capturedAt) formData.append('capturedAt', capturedAt);
   if (frameSequence != null) formData.append('frameSequence', frameSequence);
+  if (gpsAccuracy != null) formData.append('gpsAccuracy', gpsAccuracy);
+  if (heading != null) formData.append('heading', heading);
+  if (speed != null) formData.append('speed', speed);
+  if (clientSha256) formData.append('clientSha256', clientSha256);
 
   const res = await fetch(`${API_BASE}/journeys/${journeyId}/frames`, {
     method: 'POST',
@@ -165,12 +173,29 @@ export async function autoDraftComplaint(issueId, { name, email, phone }) {
   return res.json();
 }
 
-export async function simulateSubmission(complaintId) {
-  const res = await fetch(`${API_BASE}/complaints/${complaintId}/simulate`, {
+export async function initiatePortalHandoff(complaintId) {
+  const res = await fetch(`${API_BASE}/complaints/${complaintId}/initiate-handoff`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export async function recordOfficialReceipt(complaintId, { officialRefId, notes }) {
+  const res = await fetch(`${API_BASE}/complaints/${complaintId}/record-receipt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ officialRefId, notes }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+/**
+ * @deprecated Use initiatePortalHandoff + recordOfficialReceipt for truthful citizen portal submission.
+ */
+export async function simulateSubmission(complaintId) {
+  return initiatePortalHandoff(complaintId);
 }
 
 export async function listAuthorities() {

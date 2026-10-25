@@ -144,4 +144,18 @@ public class EvidenceStorageService {
             return null;
         }
     }
+
+    public byte[] loadFrameBytes(String storageKey) {
+        Path p = resolveStoragePath(storageKey);
+        if (p == null || !Files.exists(p)) {
+            log.warn("Frame file does not exist at resolved path: {}", p);
+            return null;
+        }
+        try {
+            return Files.readAllBytes(p);
+        } catch (Exception e) {
+            log.error("Failed to read raw image bytes at {}: {}", p, e.getMessage());
+            return null;
+        }
+    }
 }

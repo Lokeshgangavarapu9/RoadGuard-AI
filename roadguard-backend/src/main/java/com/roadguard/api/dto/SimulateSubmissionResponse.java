@@ -12,6 +12,13 @@ public class SimulateSubmissionResponse {
     private String authorityDeptName;
     private String grievancePortalUrl;
     private String receiptText;
+    private Long complaintId;
+    private String warning;
+
+    public Long getComplaintId() { return complaintId; }
+    public void setComplaintId(Long complaintId) { this.complaintId = complaintId; }
+    public String getWarning() { return warning; }
+    public void setWarning(String warning) { this.warning = warning; }
 
     public String getSimulatedRefId() { return simulatedRefId; }
     public void setSimulatedRefId(String simulatedRefId) { this.simulatedRefId = simulatedRefId; }

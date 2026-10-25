@@ -24,6 +24,8 @@ public class ComplaintResponse {
     private String simulatedWarning;
     private String officialRefId;
     private Instant submittedAt;
+    private String officialPortalUrl;
+    private String idempotencyKey;
     private Instant createdAt;
     private Instant approvedAt;
     private Instant updatedAt;
@@ -51,6 +53,8 @@ public class ComplaintResponse {
         r.setSimulatedWarning(c.getSimulatedWarning());
         r.setOfficialRefId(c.getOfficialRefId());
         r.setSubmittedAt(c.getSubmittedAt());
+        r.setOfficialPortalUrl(c.getOfficialPortalUrl());
+        r.setIdempotencyKey(c.getIdempotencyKey());
         r.setCreatedAt(c.getCreatedAt());
         r.setApprovedAt(c.getApprovedAt());
         r.setUpdatedAt(c.getUpdatedAt());
@@ -95,6 +99,10 @@ public class ComplaintResponse {
     public void setOfficialRefId(String officialRefId) { this.officialRefId = officialRefId; }
     public Instant getSubmittedAt() { return submittedAt; }
     public void setSubmittedAt(Instant submittedAt) { this.submittedAt = submittedAt; }
+    public String getOfficialPortalUrl() { return officialPortalUrl; }
+    public void setOfficialPortalUrl(String officialPortalUrl) { this.officialPortalUrl = officialPortalUrl; }
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getApprovedAt() { return approvedAt; }

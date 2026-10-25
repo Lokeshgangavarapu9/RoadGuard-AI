@@ -2,6 +2,7 @@ package com.roadguard.api.controller;
 
 import com.roadguard.api.dto.ComplaintResponse;
 import com.roadguard.api.dto.CreateComplaintRequest;
+import com.roadguard.api.dto.RecordReceiptRequest;
 import com.roadguard.api.dto.SimulateSubmissionResponse;
 import com.roadguard.api.entity.AuthorityRecord;
 import com.roadguard.api.entity.Complaint;
@@ -9,7 +10,7 @@ import com.roadguard.api.entity.RoadIssue;
 import com.roadguard.api.repository.AuthorityRecordRepository;
 import com.roadguard.api.repository.ComplaintRepository;
 import com.roadguard.api.repository.RoadIssueRepository;
-import com.roadguard.api.service.ComplaintService;
+import com.roadguard.api.service.ComplaintAgentService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,18 +24,18 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/complaints")
 public class ComplaintController {
 
-    private final ComplaintService complaintService;
+    private final ComplaintAgentService complaintAgentService;
     private final ComplaintRepository complaintRepository;
     private final RoadIssueRepository roadIssueRepository;
     private final AuthorityRecordRepository authorityRepository;
 
     public ComplaintController(
-        ComplaintService complaintService,
+        ComplaintAgentService complaintAgentService,
         ComplaintRepository complaintRepository,
         RoadIssueRepository roadIssueRepository,
         AuthorityRecordRepository authorityRepository
     ) {
-        this.complaintService = complaintService;
+        this.complaintAgentService = complaintAgentService;
         this.complaintRepository = complaintRepository;
         this.roadIssueRepository = roadIssueRepository;
         this.authorityRepository = authorityRepository;
@@ -47,7 +48,7 @@ public class ComplaintController {
         @RequestParam(required = false) String complainantEmail,
         @RequestParam(required = false) String complainantPhone
     ) {
-        Complaint complaint = complaintService.autoDraftComplaint(issueId, complainantName, complainantEmail, complainantPhone);
+        Complaint complaint = complaintAgentService.prepareComplaint(issueId, complainantName, complainantEmail, complainantPhone);
         return ResponseEntity.status(HttpStatus.CREATED).body(ComplaintResponse.fromEntity(complaint));
     }
 
@@ -70,8 +71,8 @@ public class ComplaintController {
         complaint.setComplainantName(req.getComplainantName());
         complaint.setComplainantEmail(req.getComplainantEmail());
         complaint.setComplainantPhone(req.getComplainantPhone());
-        complaint.setStatus(Complaint.ComplaintStatus.DRAFT);
-        complaint.setSubmissionStage("A");
+        complaint.setStatus(Complaint.ComplaintStatus.COMPLAINT_PREPARED);
+        complaint.setSubmissionStage("B");
 
         Complaint saved = complaintRepository.save(complaint);
         return ResponseEntity.status(HttpStatus.CREATED).body(ComplaintResponse.fromEntity(saved));
@@ -92,9 +93,42 @@ public class ComplaintController {
         return ResponseEntity.ok(ComplaintResponse.fromEntity(c));
     }
 
+    /**
+     * Step 1: Citizen-assisted official portal handoff packet.
+     */
+    @PostMapping("/{id}/initiate-handoff")
+    public ResponseEntity<ComplaintAgentService.PortalHandoffPacket> initiatePortalHandoff(@PathVariable Long id) {
+        ComplaintAgentService.PortalHandoffPacket packet = complaintAgentService.initiatePortalHandoff(id);
+        return ResponseEntity.ok(packet);
+    }
+
+    /**
+     * Step 2: Record verified official government grievance reference ID.
+     */
+    @PostMapping("/{id}/record-receipt")
+    public ResponseEntity<ComplaintAgentService.SubmissionConfirmation> recordOfficialReceipt(
+        @PathVariable Long id,
+        @Valid @RequestBody RecordReceiptRequest req
+    ) {
+        ComplaintAgentService.SubmissionConfirmation conf = complaintAgentService.recordOfficialReceipt(
+            id, req.getOfficialRefId(), req.getNotes());
+        return ResponseEntity.ok(conf);
+    }
+
+    /**
+     * Backwards-compatible endpoint for legacy clients: Initiates truthful portal handoff
+     * without generating fake reference IDs or mock receipts.
+     */
     @PostMapping("/{id}/simulate")
     public ResponseEntity<SimulateSubmissionResponse> simulateSubmission(@PathVariable Long id) {
-        SimulateSubmissionResponse resp = complaintService.simulateSubmission(id);
+        ComplaintAgentService.PortalHandoffPacket packet = complaintAgentService.initiatePortalHandoff(id);
+        SimulateSubmissionResponse resp = new SimulateSubmissionResponse();
+        resp.setComplaintId(packet.complaintId());
+        resp.setStatus("AWAITING_USER_ACTION");
+        resp.setSimulatedRefId("AWAITING_PORTAL_RECEIPT");
+        resp.setSimulatedAt(java.time.Instant.now());
+        resp.setWarning("Official portal handoff initiated. Please complete OTP login on " + packet.targetAuthorityName() + " and record the returned official reference ID.");
+        resp.setReceiptText(packet.dossierText());
         return ResponseEntity.ok(resp);
     }
 }

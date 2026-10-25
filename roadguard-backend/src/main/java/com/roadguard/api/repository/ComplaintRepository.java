@@ -10,6 +10,7 @@ import java.util.Optional;
 @Repository
 public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
     Optional<Complaint> findByUuid(String uuid);
+    Optional<Complaint> findByIdempotencyKey(String idempotencyKey);
     List<Complaint> findByRoadIssueId(Long roadIssueId);
     List<Complaint> findByStatus(Complaint.ComplaintStatus status);
     List<Complaint> findAllByOrderByCreatedAtDesc();

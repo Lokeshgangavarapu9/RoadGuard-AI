@@ -61,6 +61,30 @@ public class EvidenceFrame {
     @Column(nullable = false, length = 30)
     private InferenceStatus inferenceStatus = InferenceStatus.PENDING;
 
+    @Column(name = "sharpness_score")
+    private Double sharpnessScore;
+
+    @Column(name = "brightness_score")
+    private Double brightnessScore;
+
+    @Column(name = "quality_status", length = 30)
+    private String qualityStatus = "CLEAR";
+
+    @Column(name = "gps_accuracy_m")
+    private Double gpsAccuracyM;
+
+    @Column(name = "heading_deg")
+    private Double headingDeg;
+
+    @Column(name = "speed_mps")
+    private Double speedMps;
+
+    @Column(name = "image_width")
+    private Integer imageWidth;
+
+    @Column(name = "image_height")
+    private Integer imageHeight;
+
     // ── Getters and setters ──
     public Long getId() { return id; }
     public String getUuid() { return uuid; }
@@ -94,4 +118,20 @@ public class EvidenceFrame {
     public void setFrameSequence(Integer frameSequence) { this.frameSequence = frameSequence; }
     public InferenceStatus getInferenceStatus() { return inferenceStatus; }
     public void setInferenceStatus(InferenceStatus inferenceStatus) { this.inferenceStatus = inferenceStatus; }
+    public Double getSharpnessScore() { return sharpnessScore; }
+    public void setSharpnessScore(Double sharpnessScore) { this.sharpnessScore = sharpnessScore; }
+    public Double getBrightnessScore() { return brightnessScore; }
+    public void setBrightnessScore(Double brightnessScore) { this.brightnessScore = brightnessScore; }
+    public String getQualityStatus() { return qualityStatus; }
+    public void setQualityStatus(String qualityStatus) { this.qualityStatus = qualityStatus; }
+    public Double getGpsAccuracyM() { return gpsAccuracyM; }
+    public void setGpsAccuracyM(Double gpsAccuracyM) { this.gpsAccuracyM = gpsAccuracyM; }
+    public Double getHeadingDeg() { return headingDeg; }
+    public void setHeadingDeg(Double headingDeg) { this.headingDeg = headingDeg; }
+    public Double getSpeedMps() { return speedMps; }
+    public void setSpeedMps(Double speedMps) { this.speedMps = speedMps; }
+    public Integer getImageWidth() { return imageWidth; }
+    public void setImageWidth(Integer imageWidth) { this.imageWidth = imageWidth; }
+    public Integer getImageHeight() { return imageHeight; }
+    public void setImageHeight(Integer imageHeight) { this.imageHeight = imageHeight; }
 }

@@ -81,9 +81,14 @@ public class JourneyController {
         @RequestParam(value = "latitude", required = false) Double latitude,
         @RequestParam(value = "longitude", required = false) Double longitude,
         @RequestParam(value = "capturedAt", required = false) Instant capturedAt,
-        @RequestParam(value = "frameSequence", required = false) Integer frameSequence
+        @RequestParam(value = "frameSequence", required = false) Integer frameSequence,
+        @RequestParam(value = "accuracy", required = false) Double accuracy,
+        @RequestParam(value = "heading", required = false) Double heading,
+        @RequestParam(value = "speed", required = false) Double speed,
+        @RequestParam(value = "sha256", required = false) String clientSha256
     ) throws IOException {
-        EvidenceFrameResponse resp = journeyService.uploadEvidenceFrame(id, file, latitude, longitude, capturedAt, frameSequence);
+        EvidenceFrameResponse resp = journeyService.uploadEvidenceFrame(
+            id, file, latitude, longitude, capturedAt, frameSequence, accuracy, heading, speed, clientSha256);
         return ResponseEntity.status(HttpStatus.CREATED).body(resp);
     }
 

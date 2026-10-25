@@ -8,7 +8,19 @@ import java.time.Instant;
 public class Complaint {
 
     public enum ComplaintStatus {
-        DRAFT, AWAITING_REVIEW, APPROVED, SUBMITTED, SIMULATED, FAILED, WITHDRAWN
+        DRAFT,
+        AWAITING_REVIEW,
+        VERIFIED,
+        COMPLAINT_PREPARED,
+        AWAITING_USER_ACTION,
+        SUBMISSION_IN_PROGRESS,
+        SUBMITTED,
+        SUBMISSION_FAILED,
+        SUBMISSION_UNKNOWN,
+        APPROVED,
+        SIMULATED,
+        FAILED,
+        WITHDRAWN
     }
 
     @Id
@@ -46,9 +58,21 @@ public class Complaint {
     private ComplaintStatus status = ComplaintStatus.DRAFT;
 
     @Column(nullable = false, length = 10)
-    private String submissionStage = "A";
+    private String submissionStage = "B";
 
-    // Stage A simulated submission
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
+
+    @Column(name = "routing_evidence", length = 2000)
+    private String routingEvidence;
+
+    @Column(name = "official_portal_url", length = 500)
+    private String officialPortalUrl;
+
+    @Column(name = "submission_notes", length = 1000)
+    private String submissionNotes;
+
+    // Stage A simulated submission legacy fields (kept for migration backwards compatibility)
     @Column(length = 100)
     private String simulatedRefId;
 
@@ -76,6 +100,7 @@ public class Complaint {
 
     // ── Getters and setters ──
     public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     public String getUuid() { return uuid; }
     public void setUuid(String uuid) { this.uuid = uuid; }
     public RoadIssue getRoadIssue() { return roadIssue; }
@@ -106,6 +131,14 @@ public class Complaint {
     public void setOfficialRefId(String officialRefId) { this.officialRefId = officialRefId; }
     public Instant getSubmittedAt() { return submittedAt; }
     public void setSubmittedAt(Instant submittedAt) { this.submittedAt = submittedAt; }
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }
+    public String getRoutingEvidence() { return routingEvidence; }
+    public void setRoutingEvidence(String routingEvidence) { this.routingEvidence = routingEvidence; }
+    public String getOfficialPortalUrl() { return officialPortalUrl; }
+    public void setOfficialPortalUrl(String officialPortalUrl) { this.officialPortalUrl = officialPortalUrl; }
+    public String getSubmissionNotes() { return submissionNotes; }
+    public void setSubmissionNotes(String submissionNotes) { this.submissionNotes = submissionNotes; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getApprovedAt() { return approvedAt; }
     public void setApprovedAt(Instant approvedAt) { this.approvedAt = approvedAt; }
