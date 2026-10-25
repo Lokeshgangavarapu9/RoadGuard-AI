@@ -491,19 +491,17 @@ export default function App() {
             <Menu size={20} />
           </button>
 
-          <div style={{
-            width: '34px',
-            height: '34px',
-            borderRadius: '8px',
-            background: 'linear-gradient(135deg, #00f5a0 0%, #00b4d8 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#04121d',
-            boxShadow: '0 0 12px rgba(0, 245, 160, 0.35)'
-          }}>
-            <Shield size={20} />
-          </div>
+          <img
+            src="/favicon-48.png"
+            alt="RoadGuard AI App Icon"
+            style={{
+              width: '34px',
+              height: '34px',
+              borderRadius: '8px',
+              objectFit: 'contain',
+              boxShadow: '0 0 12px rgba(0, 245, 160, 0.35)'
+            }}
+          />
 
           <div>
             <h1 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: '#f8fafc', letterSpacing: '-0.01em' }}>
@@ -725,7 +723,7 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>CAMERA</div>
                   <div style={{ fontSize: '11px', color: '#f8fafc', fontWeight: 600 }}>
-                    {isDemoMode ? 'Synthetic Feed' : (recordingStatus !== 'STOPPED' ? 'Streaming' : 'Ready')}
+                    {isDemoMode ? 'Synthetic Feed (Demo)' : (recordingStatus !== 'STOPPED' ? 'Streaming' : 'Ready')}
                   </div>
                 </div>
               </div>

@@ -1,6 +1,21 @@
-// Configurable backend URL: uses VITE_API_BASE_URL in production (e.g. on Vercel),
-// or empty string in local development (falling back to Vite proxy at /api/v1).
-export const BACKEND_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+// Configurable backend URL:
+// 1. Explicit VITE_API_BASE_URL (from build environment or .env.production)
+// 2. Production fallback: when running on Vercel or any remote non-localhost domain,
+//    default directly to the deployed Render backend so API requests never fail with 405s on static hosting.
+// 3. Localhost fallback: empty string (routes through Vite dev server proxy at /api/v1).
+const envBackendUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+const isBrowser = typeof window !== 'undefined';
+const isLocalhost = isBrowser && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname === '0.0.0.0'
+);
+
+export const BACKEND_URL = envBackendUrl || (
+  isBrowser && !isLocalhost
+    ? 'https://roadguard-ai-tael.onrender.com'
+    : ''
+);
 const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api/v1` : '/api/v1';
 
 /**
@@ -17,11 +32,24 @@ export function getAssetUrl(path) {
 
 export async function getHealth() {
   const res = await fetch(`${API_BASE}/health`);
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`Invalid non-JSON response from backend (${res.status}): ${text.slice(0, 120)}`);
+  }
+  if (!res.ok) {
+    throw new Error(`Health check failed with HTTP ${res.status}`);
+  }
   return res.json();
 }
 
 export async function getStats() {
   const res = await fetch(`${API_BASE}/stats`);
+  const contentType = res.headers.get('content-type') || '';
+  if (!res.ok || !contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`Stats fetch failed (${res.status}): ${text.slice(0, 120)}`);
+  }
   return res.json();
 }
 
@@ -31,7 +59,14 @@ export async function createJourney(data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
+  const contentType = res.headers.get('content-type') || '';
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Journey creation failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (!contentType.includes('application/json')) {
+    throw new Error('Journey creation returned non-JSON response from server');
+  }
   return res.json();
 }
 

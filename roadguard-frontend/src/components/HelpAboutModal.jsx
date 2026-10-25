@@ -57,18 +57,17 @@ export default function HelpAboutModal({ isOpen, onClose }) {
           background: 'rgba(30, 41, 59, 0.5)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #00f5a0 0%, #00b4d8 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#04121d'
-            }}>
-              <Shield size={20} />
-            </div>
+            <img
+              src="/favicon-48.png"
+              alt="RoadGuard AI App Icon"
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                objectFit: 'contain',
+                boxShadow: '0 0 12px rgba(0, 245, 160, 0.35)'
+              }}
+            />
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
                 About RoadGuard AI

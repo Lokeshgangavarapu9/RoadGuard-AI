@@ -30,31 +30,47 @@ public class HealthController {
     private final RoadIssueRepository issueRepository;
     private final ComplaintRepository complaintRepository;
     private final com.roadguard.api.service.InferenceService inferenceService;
+    private final javax.sql.DataSource dataSource;
 
     public HealthController(
         JourneyRepository journeyRepository,
         EvidenceFrameRepository frameRepository,
         RoadIssueRepository issueRepository,
         ComplaintRepository complaintRepository,
-        com.roadguard.api.service.InferenceService inferenceService
+        com.roadguard.api.service.InferenceService inferenceService,
+        javax.sql.DataSource dataSource
     ) {
         this.journeyRepository = journeyRepository;
         this.frameRepository = frameRepository;
         this.issueRepository = issueRepository;
         this.complaintRepository = complaintRepository;
         this.inferenceService = inferenceService;
+        this.dataSource = dataSource;
     }
 
     @GetMapping("/health")
     public ResponseEntity<HealthResponse> getHealth() {
         HealthResponse h = new HealthResponse();
         h.setStatus("UP");
-        h.setDatabase("H2_IN_MEMORY (Stage A)");
+        h.setDatabase(resolveDatabaseEngine());
         h.setInferenceMode(inferenceService.getInferenceMode());
         h.setModelStatus(inferenceService.getModelStatus());
         h.setModelPath(inferenceService.getModelPath());
         h.setStorageType(storageType);
         return ResponseEntity.ok(h);
+    }
+
+    private String resolveDatabaseEngine() {
+        if (dataSource != null) {
+            try (java.sql.Connection conn = dataSource.getConnection()) {
+                String product = conn.getMetaData().getDatabaseProductName();
+                String version = conn.getMetaData().getDatabaseProductVersion();
+                return product + " (" + version + ")";
+            } catch (Exception e) {
+                return "CONNECTED (" + e.getMessage() + ")";
+            }
+        }
+        return "UNKNOWN";
     }
 
     @GetMapping("/stats")
