@@ -139,19 +139,51 @@ public class DatabaseMigrationTest {
             .filter(p -> "RAJMARGYATRA_NHAI".equals(p.getPortalId()))
             .findFirst()
             .orElseThrow();
-        assertEquals("LOGIN_REQUIRED", nhai.getStatus().name());
-        assertEquals("https://rajmargyatra.nhai.gov.in/complaint-login-page", nhai.getOfficialUrl());
+        assertEquals("MANUAL_HANDOFF_ONLY", nhai.getStatus().name());
+        assertEquals("https://rajmargyatra.nhai.gov.in/complaints", nhai.getOfficialUrl());
 
         ConnectedPortal cdma = portals.stream()
             .filter(p -> "AP_CDMA".equals(p.getPortalId()))
             .findFirst()
             .orElseThrow();
-        assertEquals("LOGIN_REQUIRED", cdma.getStatus().name());
+        assertEquals("MANUAL_HANDOFF_ONLY", cdma.getStatus().name());
+        assertEquals("https://cdma.ap.gov.in/services/grievances/", cdma.getOfficialUrl());
 
         ConnectedPortal meekosam = portals.stream()
             .filter(p -> "AP_MEEKOSAM_PGRS".equals(p.getPortalId()))
             .findFirst()
             .orElseThrow();
-        assertEquals("LOGIN_REQUIRED", meekosam.getStatus().name());
+        assertEquals("MANUAL_HANDOFF_ONLY", meekosam.getStatus().name());
+        assertEquals("https://meekosam.ap.gov.in/", meekosam.getOfficialUrl());
+    }
+
+    @Test
+    @Order(7)
+    void testAntiMockGuardPurgesFabricatedDemoProfile() {
+        profileRepository.deleteAll();
+
+        // Manually simulate a legacy database containing the seeded mock demo identity
+        UserProfile legacyMock = new UserProfile();
+        legacyMock.setFullName("Lokesh Kumar");
+        legacyMock.setEmail("lokesh.citizen@roadguard.local");
+        legacyMock.setPhone("+91 98765 43210");
+        legacyMock.setAddress("Door 4-12, Ring Road, Benz Circle, Vijayawada, Andhra Pradesh - 520010");
+        legacyMock.setPrimaryVrn("AP 16 AB 1234");
+        legacyMock.setVehicleType("CAR");
+        legacyMock.setAdditionalVehicles("AP 16 XY 9876 (Two-Wheeler)");
+        profileRepository.save(legacyMock);
+
+        assertEquals(1, profileRepository.count(), "Legacy mock record should be present in DB");
+
+        // getProfile() must intercept, purge the mock record, and return safe empty profile
+        UserProfile sanitized = profileService.getProfile();
+        assertNotNull(sanitized);
+        assertNull(sanitized.getId());
+        assertEquals("", sanitized.getFullName(), "Full name must be sanitized to empty string");
+        assertEquals("", sanitized.getEmail(), "Email must be sanitized to empty string");
+        assertFalse(sanitized.isRegistered(), "Sanitized profile must not report registered");
+
+        // Verify it was purged from the database
+        assertEquals(0, profileRepository.count(), "Legacy mock record must be deleted from DB");
     }
 }

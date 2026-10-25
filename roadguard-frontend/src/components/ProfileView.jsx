@@ -38,6 +38,7 @@ export default function ProfileView({ onProfileUpdated }) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [refreshingPortalId, setRefreshingPortalId] = useState(null);
+  const [portalNotice, setPortalNotice] = useState(null);
 
   // Live VRN Normalization helper
   function normalizeVrn(vrn) {
@@ -62,15 +63,33 @@ export default function ProfileView({ onProfileUpdated }) {
       ]);
 
       if (profileData) {
-        setProfile({
-          fullName: profileData.fullName || '',
-          email: profileData.email || '',
-          phoneNumber: profileData.phoneNumber || profileData.phone || '',
-          address: profileData.address || '',
-          primaryVrn: profileData.primaryVrn || '',
-          vehicleType: profileData.vehicleType || 'CAR',
-          additionalVehicles: profileData.additionalVehicles || ''
-        });
+        // Anti-mock guard: Ensure new/unregistered users never receive fabricated demo details
+        const isLegacyDemo =
+          profileData.email === 'lokesh.citizen@roadguard.local' ||
+          (profileData.fullName === 'Lokesh Kumar' && (profileData.primaryVrn === 'AP 16 AB 1234' || profileData.primaryVrnNormalized === 'AP16AB1234')) ||
+          profileData.phone === '+91 98765 43210';
+
+        if (!isLegacyDemo && (profileData.fullName || profileData.email)) {
+          setProfile({
+            fullName: profileData.fullName || '',
+            email: profileData.email || '',
+            phoneNumber: profileData.phoneNumber || profileData.phone || '',
+            address: profileData.address || '',
+            primaryVrn: profileData.primaryVrn || '',
+            vehicleType: profileData.vehicleType || 'CAR',
+            additionalVehicles: profileData.additionalVehicles || ''
+          });
+        } else {
+          setProfile({
+            fullName: '',
+            email: '',
+            phoneNumber: '',
+            address: '',
+            primaryVrn: '',
+            vehicleType: 'CAR',
+            additionalVehicles: ''
+          });
+        }
       }
 
       if (portalsData && Array.isArray(portalsData)) {
@@ -118,6 +137,31 @@ export default function ProfileView({ onProfileUpdated }) {
     } finally {
       setRefreshingPortalId(null);
     }
+  }
+
+  function handleCheckStatusOnPortal(portal) {
+    const portalKey = portal.portalId || portal.id;
+    // 1. Open official portal in new tab
+    if (portal.officialUrl) {
+      window.open(portal.officialUrl, '_blank', 'noopener,noreferrer');
+    }
+    // 2. Refresh last verified timestamp on backend
+    handleRefreshPortal(portalKey);
+
+    // 3. Inform citizen why browser isolation necessitates manual status checking
+    const portalName = portal.portalName || 'Government Portal';
+    const instructions = portal.portalId === 'RAJMARGYATRA_NHAI'
+      ? 'Check complaint status under the "View complaint status" tab on Rajmargyatra.'
+      : 'Check complaint status under "Services -> Grievances" on the CDMA portal.';
+
+    setPortalNotice({
+      title: `Opened ${portalName}`,
+      message: `Due to browser security (Same-Origin Policy), RoadGuard AI cannot read login sessions or cookies from other browser tabs. ${instructions}`
+    });
+
+    setTimeout(() => {
+      setPortalNotice(null);
+    }, 9000);
   }
 
   function getStatusBadge(status) {
@@ -310,7 +354,7 @@ export default function ProfileView({ onProfileUpdated }) {
                   required
                   value={profile.fullName}
                   onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
-                  placeholder="e.g. Lokesh Kumar"
+                  placeholder="e.g. Enter your full legal name"
                   style={{
                     width: '100%',
                     padding: '10px 14px 10px 38px',
@@ -396,7 +440,7 @@ export default function ProfileView({ onProfileUpdated }) {
                   type="text"
                   value={profile.address}
                   onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                  placeholder="e.g. Vijayawada, Krishna District, Andhra Pradesh"
+                  placeholder="e.g. Flat/Door No, Street Name, City, State - PIN"
                   style={{
                     width: '100%',
                     padding: '10px 14px 10px 38px',
@@ -438,7 +482,7 @@ export default function ProfileView({ onProfileUpdated }) {
                   type="text"
                   value={profile.primaryVrn}
                   onChange={(e) => setProfile({ ...profile, primaryVrn: e.target.value })}
-                  placeholder="e.g. AP 16 AB 1234 or DL 01 A 9999"
+                  placeholder="e.g. DL 01 AB 1234 or AP 16 CD 5678"
                   style={{
                     width: '100%',
                     padding: '10px 14px 10px 38px',
@@ -497,7 +541,7 @@ export default function ProfileView({ onProfileUpdated }) {
                 type="text"
                 value={profile.additionalVehicles}
                 onChange={(e) => setProfile({ ...profile, additionalVehicles: e.target.value })}
-                placeholder="e.g. AP 16 CD 5678, TS 09 EF 9012"
+                placeholder="e.g. KA 01 CD 5678, TS 09 EF 9012"
                 style={{
                   width: '100%',
                   padding: '10px 14px',
@@ -563,10 +607,46 @@ export default function ProfileView({ onProfileUpdated }) {
                 Connected Government Portals
               </h2>
             </div>
-            <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
               RoadGuard AI routes verified road hazards to the legally responsible statutory authority. State and national grievance portals strictly mandate citizen mobile OTP or BotDetect CAPTCHA verification. We generate a pre-formatted evidence dossier and launch an assisted citizen handoff.
             </p>
+
+            {/* Informational Browser Isolation Notice */}
+            <div style={{
+              padding: '12px 14px',
+              backgroundColor: 'rgba(56, 189, 248, 0.08)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              borderRadius: '8px',
+              display: 'flex',
+              gap: '10px',
+              alignItems: 'flex-start'
+            }}>
+              <Info size={16} color="#38bdf8" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ fontSize: '11px', color: '#cbd5e1', lineHeight: 1.45 }}>
+                <strong style={{ color: '#38bdf8' }}>Browser Security & Status Tracking:</strong> Government portals require citizen mobile OTP or CAPTCHA. Due to browser security (Same-Origin Policy), external web applications cannot access active sessions or cookies from other browser tabs. Click <strong>"Open Portal to Check Status"</strong> to track your grievance directly.
+              </div>
+            </div>
           </div>
+
+          {/* Active Portal Notification Toast */}
+          {portalNotice && (
+            <div style={{
+              padding: '14px 18px',
+              backgroundColor: 'rgba(14, 165, 233, 0.15)',
+              border: '1px solid #0ea5e9',
+              borderRadius: '10px',
+              color: '#38bdf8',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '10px'
+            }}>
+              <ExternalLink size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ fontSize: '12px', lineHeight: 1.45 }}>
+                <div style={{ fontWeight: 700, marginBottom: '2px' }}>{portalNotice.title}</div>
+                <div>{portalNotice.message}</div>
+              </div>
+            </div>
+          )}
 
           {/* Portal Cards */}
           {portals.map((portal) => {
@@ -669,33 +749,11 @@ export default function ProfileView({ onProfileUpdated }) {
                     Last Verified: {portal.lastVerifiedAt ? new Date(portal.lastVerifiedAt).toLocaleDateString() : 'Active configuration'}
                   </span>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <button
                       type="button"
-                      onClick={() => handleRefreshPortal(currentPortalKey)}
+                      onClick={() => handleCheckStatusOnPortal(portal)}
                       disabled={isRefreshing}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '6px',
-                        color: '#94a3b8',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        cursor: isRefreshing ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <RefreshCw size={12} className={isRefreshing ? 'spin' : ''} />
-                      Verify Status
-                    </button>
-
-                    <a
-                      href={portal.officialUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       style={{
                         padding: '6px 14px',
                         backgroundColor: 'rgba(14, 165, 233, 0.15)',
@@ -704,14 +762,20 @@ export default function ProfileView({ onProfileUpdated }) {
                         color: '#38bdf8',
                         fontSize: '11px',
                         fontWeight: 700,
-                        textDecoration: 'none',
+                        cursor: isRefreshing ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px'
                       }}
+                      title="Opens official portal in a new tab to check complaint status"
                     >
-                      <ExternalLink size={12} /> Open Portal
-                    </a>
+                      {isRefreshing ? (
+                        <RefreshCw size={12} className="spin" />
+                      ) : (
+                        <ExternalLink size={12} />
+                      )}
+                      Open Portal to Check Status
+                    </button>
                   </div>
                 </div>
               </div>

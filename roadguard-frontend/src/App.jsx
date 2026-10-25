@@ -40,7 +40,8 @@ import {
   listJourneys,
   listIssues,
   sendGpsBatch,
-  wakeUpBackend
+  wakeUpBackend,
+  getUserProfile
 } from './api';
 
 // Geodesic Haversine distance calculation in meters
@@ -73,8 +74,8 @@ export default function App() {
   const [activeJourney, setActiveJourney] = useState(null);
   const [vehicleType, setVehicleType] = useState('CAR');
   const [recordingStatus, setRecordingStatus] = useState('STOPPED');
-  const [riderName, setRiderName] = useState('Lokesh Kumar');
-  const [riderEmail, setRiderEmail] = useState('lokesh@roadguard.local');
+  const [riderName, setRiderName] = useState('');
+  const [riderEmail, setRiderEmail] = useState('');
   const [distanceMeters, setDistanceMeters] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [completedJourneyBanner, setCompletedJourneyBanner] = useState(null);
@@ -143,15 +144,21 @@ export default function App() {
           setHealth(h);
           setIsWakingBackend(false);
         }
-        const [s, iss, jList] = await Promise.all([
+        const [s, iss, jList, prof] = await Promise.all([
           getStats().catch(() => null),
           listIssues().catch(() => []),
-          listJourneys().catch(() => [])
+          listJourneys().catch(() => []),
+          getUserProfile().catch(() => null)
         ]);
         if (isMounted) {
           if (s) setStats(s);
           if (iss) setIssues(iss);
           if (jList) setJourneysList(jList);
+          if (prof && prof.fullName && prof.email !== 'lokesh.citizen@roadguard.local') {
+            setRiderName(prof.fullName);
+            if (prof.email) setRiderEmail(prof.email);
+            if (prof.vehicleType) setVehicleType(prof.vehicleType);
+          }
         }
       } catch (err) {
         if (!wakeAttempted && isMounted) {
@@ -373,8 +380,8 @@ export default function App() {
 
       const journey = await createJourney({
         vehicleType,
-        riderName,
-        riderEmail,
+        riderName: riderName && riderName.trim() ? riderName.trim() : null,
+        riderEmail: riderEmail && riderEmail.trim() ? riderEmail.trim() : null,
         startLatitude: startPt.lat,
         startLongitude: startPt.lon,
         startAddress: 'Live GPS Location',

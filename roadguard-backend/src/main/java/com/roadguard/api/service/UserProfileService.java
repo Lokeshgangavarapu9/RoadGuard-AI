@@ -25,20 +25,34 @@ public class UserProfileService {
         this.portalRepository = portalRepository;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public UserProfile getProfile() {
-        return profileRepository.findFirstByOrderByIdAsc()
-            .orElseGet(() -> {
-                UserProfile empty = new UserProfile();
-                empty.setFullName("");
-                empty.setEmail("");
-                empty.setPhone("");
-                empty.setAddress("");
-                empty.setPrimaryVrn("");
-                empty.setVehicleType("CAR");
-                empty.setAdditionalVehicles("");
-                return empty;
-            });
+        UserProfile profile = profileRepository.findFirstByOrderByIdAsc().orElse(null);
+        if (profile != null) {
+            // Anti-mock guard: purge legacy seeded demo profile from database
+            boolean isLegacyDemo = "lokesh.citizen@roadguard.local".equalsIgnoreCase(profile.getEmail())
+                || ("Lokesh Kumar".equalsIgnoreCase(profile.getFullName()) && "AP16AB1234".equalsIgnoreCase(profile.getPrimaryVrnNormalized()))
+                || "+91 98765 43210".equals(profile.getPhone());
+
+            if (isLegacyDemo) {
+                log.warn("Purging legacy mock demo citizen profile (id: {}, email: {}) from database", profile.getId(), profile.getEmail());
+                profileRepository.delete(profile);
+                profile = null;
+            }
+        }
+
+        if (profile == null) {
+            UserProfile empty = new UserProfile();
+            empty.setFullName("");
+            empty.setEmail("");
+            empty.setPhone("");
+            empty.setAddress("");
+            empty.setPrimaryVrn("");
+            empty.setVehicleType("CAR");
+            empty.setAdditionalVehicles("");
+            return empty;
+        }
+        return profile;
     }
 
     @Transactional
@@ -88,17 +102,21 @@ public class UserProfileService {
             .orElseThrow(() -> new IllegalArgumentException("Unknown portal ID: " + portalId));
 
         portal.setLastVerifiedAt(Instant.now());
-        // Truthful verified statuses as discovered during official portal audit:
-        // No portal currently provides an open third-party REST API without human CAPTCHA/OTP.
+        // Truthful verified statuses:
+        // No government portal provides an open, unauthenticated REST API without citizen OTP or CAPTCHA.
+        // Web browser Same-Origin Policy strictly prohibits cross-origin reading of session tokens or cookies.
         if ("RAJMARGYATRA_NHAI".equalsIgnoreCase(portalId)) {
             portal.setStatus(ConnectedPortal.ConnectionStatus.MANUAL_HANDOFF_ONLY);
-            portal.setConnectionNotes("Official direct submission API is restricted to NHAI intranet networks. RoadGuard AI compiles verified coordinates, highway chainage, and evidence photos into an official dossier for user-controlled handoff.");
+            portal.setOfficialUrl("https://rajmargyatra.nhai.gov.in/complaints");
+            portal.setConnectionNotes("Citizen Mobile OTP login required. Due to browser security (Same-Origin Policy), external web apps cannot inspect active sessions across browser tabs. Track complaint status directly on Rajmargyatra under 'View complaint status'.");
         } else if ("AP_CDMA".equalsIgnoreCase(portalId)) {
             portal.setStatus(ConnectedPortal.ConnectionStatus.MANUAL_HANDOFF_ONLY);
-            portal.setConnectionNotes("CDMA requires Citizen Mobile OTP through the Puramithra/CDMA citizen portal. RoadGuard AI prepares the municipal category (Roads -> Potholes), ward details, and photo package for citizen filing.");
+            portal.setOfficialUrl("https://cdma.ap.gov.in/services/grievances/");
+            portal.setConnectionNotes("Citizen Puramithra/CDMA Mobile OTP login required. Browser Same-Origin Policy prevents reading active login sessions across tabs. Track municipal grievance status directly on the CDMA portal under 'Services -> Grievances'.");
         } else if ("AP_MEEKOSAM_PGRS".equalsIgnoreCase(portalId)) {
             portal.setStatus(ConnectedPortal.ConnectionStatus.MANUAL_HANDOFF_ONLY);
-            portal.setConnectionNotes("Portal is secured by BotDetect CAPTCHA and Aadhaar/Mobile OTP. Programmatic bot submissions are strictly prohibited by state security policy. RoadGuard AI generates a formal legal complaint draft with Section 133 CrPC and IRC:82-2015 grounds.");
+            portal.setOfficialUrl("https://meekosam.ap.gov.in/");
+            portal.setConnectionNotes("Portal secured by BotDetect CAPTCHA & Aadhaar OTP. Automatic status polling is not supported. Use the official portal to track state grievance progress.");
         }
         return portalRepository.save(portal);
     }
