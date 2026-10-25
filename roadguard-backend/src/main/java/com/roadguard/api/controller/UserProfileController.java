@@ -37,4 +37,9 @@ public class UserProfileController {
     public ResponseEntity<ConnectedPortal> testPortalConnection(@PathVariable String portalId) {
         return ResponseEntity.ok(profileService.checkPortalStatus(portalId));
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<java.util.Map<String, String>> handleValidationException(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(java.util.Map.of("error", ex.getMessage()));
+    }
 }

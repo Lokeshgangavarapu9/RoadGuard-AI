@@ -19,6 +19,8 @@ import java.util.UUID;
 @Service
 public class EvidenceStorageService {
 
+    private static final Logger log = LoggerFactory.getLogger(EvidenceStorageService.class);
+
     @Value("${roadguard.storage.local.base-path:./uploads/evidence}")
     private String basePath;
 

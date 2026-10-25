@@ -65,7 +65,7 @@ export default function ProfileView({ onProfileUpdated }) {
         setProfile({
           fullName: profileData.fullName || '',
           email: profileData.email || '',
-          phoneNumber: profileData.phoneNumber || '',
+          phoneNumber: profileData.phoneNumber || profileData.phone || '',
           address: profileData.address || '',
           primaryVrn: profileData.primaryVrn || '',
           vehicleType: profileData.vehicleType || 'CAR',
@@ -91,7 +91,12 @@ export default function ProfileView({ onProfileUpdated }) {
     setSaveSuccess(false);
 
     try {
-      const updated = await updateUserProfile(profile);
+      const payload = {
+        ...profile,
+        phone: (profile.phoneNumber || profile.phone || '').trim(),
+        phoneNumber: (profile.phoneNumber || profile.phone || '').trim()
+      };
+      const updated = await updateUserProfile(payload);
       setSaveSuccess(true);
       if (onProfileUpdated) onProfileUpdated(updated);
       setTimeout(() => setSaveSuccess(false), 4000);

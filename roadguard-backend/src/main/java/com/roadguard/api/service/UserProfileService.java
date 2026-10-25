@@ -30,28 +30,35 @@ public class UserProfileService {
     public UserProfile getProfile() {
         return profileRepository.findFirstByOrderByIdAsc()
             .orElseGet(() -> {
-                UserProfile fallback = new UserProfile(
-                    "Lokesh Kumar",
-                    "lokesh.citizen@roadguard.local",
-                    "+91 98765 43210"
-                );
-                fallback.setAddress("Door 4-12, Ring Road, Benz Circle, Vijayawada, Andhra Pradesh - 520010");
-                fallback.setPrimaryVrn("AP 16 AB 1234");
-                fallback.setVehicleType("CAR");
-                fallback.setAdditionalVehicles("AP 16 XY 9876 (Two-Wheeler)");
-                return profileRepository.save(fallback);
+                UserProfile empty = new UserProfile();
+                empty.setFullName("");
+                empty.setEmail("");
+                empty.setPhone("");
+                empty.setAddress("");
+                empty.setPrimaryVrn("");
+                empty.setVehicleType("CAR");
+                empty.setAdditionalVehicles("");
+                return empty;
             });
     }
 
     @Transactional
     public UserProfile updateProfile(UserProfile request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Profile request body cannot be null.");
+        }
         if (request.getFullName() == null || request.getFullName().trim().isEmpty()) {
             throw new IllegalArgumentException("Full name cannot be blank.");
         }
         if (request.getEmail() == null || !request.getEmail().contains("@")) {
             throw new IllegalArgumentException("A valid email address is required.");
         }
-        if (request.getPhone() == null || request.getPhone().trim().length() < 10) {
+
+        String effectivePhone = request.getPhone();
+        if (effectivePhone == null || effectivePhone.trim().isEmpty()) {
+            effectivePhone = request.getPhoneNumber();
+        }
+        if (effectivePhone == null || effectivePhone.replaceAll("[^0-9]", "").length() < 10) {
             throw new IllegalArgumentException("A valid 10-digit phone number is required.");
         }
 
@@ -60,14 +67,14 @@ public class UserProfileService {
 
         existing.setFullName(request.getFullName().trim());
         existing.setEmail(request.getEmail().trim());
-        existing.setPhone(request.getPhone().trim());
+        existing.setPhone(effectivePhone.trim());
         existing.setAddress(request.getAddress() != null ? request.getAddress().trim() : null);
         existing.setPrimaryVrn(request.getPrimaryVrn() != null ? request.getPrimaryVrn().trim() : null);
         existing.setVehicleType(request.getVehicleType() != null ? request.getVehicleType().trim() : "CAR");
         existing.setAdditionalVehicles(request.getAdditionalVehicles() != null ? request.getAdditionalVehicles().trim() : null);
         existing.setUpdatedAt(Instant.now());
 
-        log.info("Updated citizen profile for user: {} (VRN: {})", existing.getFullName(), existing.getPrimaryVrn());
+        log.info("Persisted genuine citizen profile (VRN: {})", existing.getPrimaryVrnNormalized());
         return profileRepository.save(existing);
     }
 

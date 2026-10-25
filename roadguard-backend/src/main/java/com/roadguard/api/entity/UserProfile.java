@@ -69,6 +69,17 @@ public class UserProfile {
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
 
+    public String getPhoneNumber() { return phone; }
+    public void setPhoneNumber(String phoneNumber) { 
+        if (phoneNumber != null && !phoneNumber.trim().isEmpty()) {
+            this.phone = phoneNumber; 
+        }
+    }
+
+    public boolean isRegistered() {
+        return fullName != null && !fullName.trim().isEmpty() && email != null && !email.trim().isEmpty();
+    }
+
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
 
