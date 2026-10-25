@@ -19,10 +19,19 @@ import java.util.UUID;
 @Service
 public class EvidenceStorageService {
 
-    private static final Logger log = LoggerFactory.getLogger(EvidenceStorageService.class);
-
     @Value("${roadguard.storage.local.base-path:./uploads/evidence}")
     private String basePath;
+
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        File persistentMount = new File("/var/data/roadguard-evidence");
+        if (persistentMount.exists() && persistentMount.canWrite()) {
+            this.basePath = persistentMount.getAbsolutePath();
+            log.info("EvidenceStorageService: Mounted persistent volume at {}", this.basePath);
+        } else {
+            log.info("EvidenceStorageService: Using configured storage path at {}", this.basePath);
+        }
+    }
 
     public static class StoredFileMeta {
         public String storageKey;

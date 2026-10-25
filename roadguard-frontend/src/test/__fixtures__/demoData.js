@@ -1,4 +1,4 @@
-// High-fidelity synthetic GPX track along NH-16 Andhra Pradesh (Vijayawada Benz Circle -> Mangalagiri -> Guntur)
+// Test fixtures for offline UI / canvas unit testing
 export const DEMO_TRACK = [
   { lat: 16.5062, lon: 80.6480, speed: 11.2, heading: 215, road: 'NH-16 Benz Circle Vijayawada', defect: null },
   { lat: 16.5020, lon: 80.6445, speed: 14.5, heading: 218, road: 'NH-16 Krishna River Bridge Approach', defect: null },
@@ -12,16 +12,12 @@ export const DEMO_TRACK = [
   { lat: 16.4300, lon: 80.5800, speed: 15.0, heading: 235, road: 'NH-16 Guntur North Entry', defect: null },
 ];
 
-/**
- * Synthesizes a realistic road camera frame with asphalt texture and simulated defect bbox
- */
 export function generateSyntheticFrame(defectType, sequence) {
   const canvas = document.createElement('canvas');
   canvas.width = 640;
   canvas.height = 480;
   const ctx = canvas.getContext('2d');
 
-  // Road background gradient
   const grad = ctx.createLinearGradient(0, 0, 0, 480);
   grad.addColorStop(0, '#2d3748');
   grad.addColorStop(0.4, '#1a202c');
@@ -29,7 +25,6 @@ export function generateSyntheticFrame(defectType, sequence) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 640, 480);
 
-  // Road lane markings
   ctx.strokeStyle = '#f6e05e';
   ctx.lineWidth = 6;
   ctx.setLineDash([30, 25]);
@@ -38,7 +33,6 @@ export function generateSyntheticFrame(defectType, sequence) {
   ctx.lineTo(320, 480);
   ctx.stroke();
 
-  // Edge white lines
   ctx.strokeStyle = '#edf2f7';
   ctx.lineWidth = 4;
   ctx.setLineDash([]);
@@ -49,7 +43,6 @@ export function generateSyntheticFrame(defectType, sequence) {
   ctx.lineTo(600, 480);
   ctx.stroke();
 
-  // If defect is present, draw asphalt damage
   if (defectType === 'POTHOLE') {
     ctx.fillStyle = '#0a0d14';
     ctx.beginPath();
@@ -59,7 +52,6 @@ export function generateSyntheticFrame(defectType, sequence) {
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Red detection BBox
     ctx.strokeStyle = '#ff3366';
     ctx.lineWidth = 2;
     ctx.strokeRect(230, 300, 180, 100);
@@ -77,7 +69,6 @@ export function generateSyntheticFrame(defectType, sequence) {
     }
     ctx.stroke();
 
-    // Amber detection BBox
     ctx.strokeStyle = '#ffb703';
     ctx.lineWidth = 2;
     ctx.strokeRect(220, 310, 170, 110);
@@ -86,7 +77,6 @@ export function generateSyntheticFrame(defectType, sequence) {
     ctx.fillText('ALLIGATOR_CRACK (88.1%)', 225, 302);
   }
 
-  // Camera OSD telemetry overlay
   ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
   ctx.fillRect(10, 10, 380, 50);
   ctx.fillStyle = '#00f5a0';

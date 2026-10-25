@@ -57,7 +57,7 @@ export default function ProfileView({ onProfileUpdated }) {
     setErrorMessage(null);
     try {
       const [profileData, portalsData] = await Promise.all([
-        getUserProfile().catch(() => null),
+        getUserProfile(),
         getConnectedPortals().catch(() => [])
       ]);
 
@@ -78,7 +78,7 @@ export default function ProfileView({ onProfileUpdated }) {
       }
     } catch (err) {
       console.error('Failed to load profile or portal data:', err);
-      setErrorMessage('Could not load profile or portal configuration from backend.');
+      setErrorMessage(err.message || 'Could not load profile from cloud backend.');
     } finally {
       setIsLoading(false);
     }
@@ -171,9 +171,42 @@ export default function ProfileView({ onProfileUpdated }) {
 
   if (isLoading) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+      <div style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
         <RefreshCw size={28} className="spin" style={{ marginBottom: '12px', color: '#00f5a0' }} />
         <p>Loading user profile and connected portal status...</p>
+      </div>
+    );
+  }
+
+  if (errorMessage && !profile.fullName) {
+    return (
+      <div style={{
+        maxWidth: '560px',
+        margin: '60px auto',
+        padding: '32px 24px',
+        textAlign: 'center',
+        background: '#0f172a',
+        border: '1px solid rgba(239, 68, 68, 0.35)',
+        borderRadius: '16px',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+      }}>
+        <AlertCircle size={44} color="#f87171" style={{ margin: '0 auto 12px' }} />
+        <h3 style={{ color: '#f8fafc', margin: '0 0 8px', fontSize: '18px', fontWeight: 700 }}>
+          Unable to Load Profile
+        </h3>
+        <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 24px', lineHeight: 1.5 }}>
+          {errorMessage}
+          <br />
+          The cloud backend may be asleep on Render or temporarily unreachable.
+        </p>
+        <button
+          onClick={loadData}
+          className="btn-primary"
+          style={{ padding: '10px 24px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+        >
+          <RefreshCw size={15} />
+          Retry Connection
+        </button>
       </div>
     );
   }

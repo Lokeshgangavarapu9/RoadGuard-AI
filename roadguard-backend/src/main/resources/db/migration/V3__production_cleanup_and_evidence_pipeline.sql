@@ -56,11 +56,32 @@ ALTER TABLE complaints ADD CONSTRAINT complaints_status_chk CHECK (status IN (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_complaint_idempotency 
     ON complaints(idempotency_key) WHERE idempotency_key IS NOT NULL;
 
+-- Partial unique index preventing duplicate active complaints for the same road issue
+CREATE UNIQUE INDEX IF NOT EXISTS idx_active_complaint_per_issue
+    ON complaints(road_issue_id) 
+    WHERE status IN ('DRAFT', 'AWAITING_REVIEW', 'VERIFIED', 'COMPLAINT_PREPARED', 'AWAITING_USER_ACTION', 'SUBMISSION_IN_PROGRESS', 'SUBMITTED');
+
 -- 4. Clean up seeded mock complaints and fake reference numbers
-DELETE FROM complaints WHERE simulated_ref_id LIKE 'SIM-%' OR status = 'SIMULATED';
+DELETE FROM complaints WHERE simulated_ref_id LIKE 'SIM-%' OR simulated_ref_id LIKE 'STM-AP-%' OR status = 'SIMULATED';
+
+-- Clean up seeded demo citizen PII
+DELETE FROM user_profiles WHERE email = 'lokesh.citizen@roadguard.local' OR full_name = 'Lokesh Kumar';
 
 -- 5. Truthful Portal Status Updates
 UPDATE connected_portals 
-SET status = 'MANUAL_HANDOFF_ONLY',
-    connection_notes = 'Citizen authentication required via official portal. Automated background bot filing is prohibited by portal terms.'
-WHERE status = 'CONNECTED';
+SET status = 'LOGIN_REQUIRED',
+    portal_url = 'https://rajmargyatra.nhai.gov.in/complaint-login-page',
+    connection_notes = 'Citizen Mobile SMS OTP authentication required on official portal.'
+WHERE dept_code = 'NHAI_AP';
+
+UPDATE connected_portals 
+SET status = 'LOGIN_REQUIRED',
+    portal_url = 'https://cdma.ap.gov.in/services/grievances/',
+    connection_notes = 'Citizen Puramithra credentials required on official portal.'
+WHERE dept_code = 'AP_CDMA';
+
+UPDATE connected_portals 
+SET status = 'LOGIN_REQUIRED',
+    portal_url = 'https://services.india.gov.in',
+    connection_notes = 'State grievance portal citizen registration required.'
+WHERE dept_code = 'AP_RBD';

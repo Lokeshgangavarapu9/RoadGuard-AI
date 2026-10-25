@@ -82,7 +82,12 @@ public class JourneyService {
         Journey journey = journeyRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Journey not found: " + id));
 
-        journey.setStatus(Journey.JourneyStatus.STOPPED);
+        if (journey.getTotalFrames() == null || journey.getTotalFrames() == 0) {
+            journey.setStatus(Journey.JourneyStatus.CANCELLED);
+            log.info("Journey #{} had 0 frames analyzed; marking status as CANCELLED to prevent polluting history and reports.", id);
+        } else {
+            journey.setStatus(Journey.JourneyStatus.STOPPED);
+        }
         journey.setStoppedAt(Instant.now());
         if (req != null) {
             if (req.getNotes() != null) journey.setNotes(req.getNotes());

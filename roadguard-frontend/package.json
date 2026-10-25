@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "canvas-confetti": "^1.9.4",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.61.0",

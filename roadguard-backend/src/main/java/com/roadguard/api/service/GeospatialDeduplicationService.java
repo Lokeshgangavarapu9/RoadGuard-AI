@@ -79,12 +79,11 @@ public class GeospatialDeduplicationService {
         Double gpsAccuracyM,
         EvidenceFrame incomingFrame
     ) {
-        double effectiveRadius = (gpsAccuracyM != null && gpsAccuracyM > 0)
-            ? Math.min(16.0, Math.max(8.0, gpsAccuracyM))
-            : dedupRadiusMeters;
+        double incomingAcc = (gpsAccuracyM != null && gpsAccuracyM > 0) ? gpsAccuracyM : 10.0;
+        double maxPossibleRadius = 16.0;
 
-        double deltaLat = (effectiveRadius * 2) / 111320.0;
-        double deltaLon = (effectiveRadius * 2) / (111320.0 * Math.cos(Math.toRadians(lat)));
+        double deltaLat = (maxPossibleRadius * 2) / 111320.0;
+        double deltaLon = (maxPossibleRadius * 2) / (111320.0 * Math.cos(Math.toRadians(lat)));
 
         List<RoadIssue> candidates = roadIssueRepository.findCandidatesInBoundingBox(
             lat - deltaLat, lat + deltaLat, lon - deltaLon, lon + deltaLon
@@ -93,8 +92,13 @@ public class GeospatialDeduplicationService {
         for (RoadIssue candidate : candidates) {
             if (candidate.getDefectClass() != defectClass) continue;
 
+            double candidateAcc = (candidate.getLocationAccuracyM() != null && candidate.getLocationAccuracyM() > 0)
+                ? candidate.getLocationAccuracyM()
+                : 10.0;
+            double adaptiveRadius = Math.min(16.0, 10.0 + 0.25 * (incomingAcc + candidateAcc));
+
             double distance = calculateDistanceMeters(lat, lon, candidate.getLatitude(), candidate.getLongitude());
-            if (distance > effectiveRadius) continue;
+            if (distance > adaptiveRadius) continue;
 
             // Check heading alignment if both are available
             if (headingDeg != null && incomingFrame != null && incomingFrame.getHeadingDeg() != null) {

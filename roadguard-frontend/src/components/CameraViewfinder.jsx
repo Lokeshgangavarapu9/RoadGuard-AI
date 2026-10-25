@@ -261,6 +261,14 @@ export default function CameraViewfinder({
         const heading = currentLocation?.heading;
         const speed = currentLocation?.speed;
 
+        // 3-Tier GPS Policy:
+        // Tier 3 (> 50m): Pause automatic sampling to prevent false coordinate pinning
+        if (accuracy != null && accuracy > 50) {
+          setLastInferenceStatus(`GPS fix is coarse (±${Math.round(accuracy)}m > 50m limit) — automatic sampling paused until satellite lock improves.`);
+          inFlightInferenceRef.current = false;
+          return;
+        }
+
         // Upload genuine frame to backend ONNX pipeline with verified telemetry
         const resp = await uploadEvidenceFrame(journeyId, file, {
           latitude: lat,

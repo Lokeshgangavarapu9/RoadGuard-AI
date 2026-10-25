@@ -39,7 +39,8 @@ import {
   stopJourney,
   listJourneys,
   listIssues,
-  sendGpsBatch
+  sendGpsBatch,
+  wakeUpBackend
 } from './api';
 
 // Geodesic Haversine distance calculation in meters
@@ -65,6 +66,8 @@ export default function App() {
   // Backend Health & Stats
   const [health, setHealth] = useState(null);
   const [stats, setStats] = useState(null);
+  const [isWakingBackend, setIsWakingBackend] = useState(false);
+  const [wakeProgress, setWakeProgress] = useState('');
 
   // Journey & Recording State
   const [activeJourney, setActiveJourney] = useState(null);
@@ -130,24 +133,56 @@ export default function App() {
 
   // 1. Initial Load & Periodic Background Sync
   useEffect(() => {
-    async function syncData() {
+    let isMounted = true;
+    let wakeAttempted = false;
+
+    async function checkAndSync() {
       try {
-        const h = await getHealth();
-        setHealth(h);
-        const s = await getStats();
-        setStats(s);
-        const iss = await listIssues();
-        setIssues(iss);
-        const jList = await listJourneys();
-        setJourneysList(jList);
+        const h = await getHealth(4000);
+        if (isMounted) {
+          setHealth(h);
+          setIsWakingBackend(false);
+        }
+        const [s, iss, jList] = await Promise.all([
+          getStats().catch(() => null),
+          listIssues().catch(() => []),
+          listJourneys().catch(() => [])
+        ]);
+        if (isMounted) {
+          if (s) setStats(s);
+          if (iss) setIssues(iss);
+          if (jList) setJourneysList(jList);
+        }
       } catch (err) {
-        console.warn('Backend sync warning:', err.message);
+        if (!wakeAttempted && isMounted) {
+          wakeAttempted = true;
+          setIsWakingBackend(true);
+          setWakeProgress('Waking cloud backend (Render cold start)...');
+          wakeUpBackend((progress) => {
+            if (isMounted) setWakeProgress(progress.message);
+          })
+            .then((resumedHealth) => {
+              if (isMounted) {
+                setHealth(resumedHealth);
+                setIsWakingBackend(false);
+              }
+            })
+            .catch((wakeErr) => {
+              if (isMounted) {
+                setIsWakingBackend(false);
+                console.warn('Backend wake-up failed:', wakeErr.message);
+              }
+            });
+        }
       }
     }
 
-    syncData();
-    const interval = setInterval(syncData, 5000);
-    return () => clearInterval(interval);
+    checkAndSync();
+    const interval = setInterval(checkAndSync, 6000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Refs for tracking without stale state closures
@@ -533,15 +568,35 @@ export default function App() {
               width: '7px',
               height: '7px',
               borderRadius: '50%',
-              backgroundColor: health?.status === 'UP' ? '#00f5a0' : '#ff3366',
-              boxShadow: health?.status === 'UP' ? '0 0 8px #00f5a0' : 'none'
+              backgroundColor: health?.status === 'UP' ? '#00f5a0' : (isWakingBackend ? '#f59e0b' : '#ff3366'),
+              boxShadow: health?.status === 'UP' ? '0 0 8px #00f5a0' : (isWakingBackend ? '0 0 8px #f59e0b' : 'none')
             }} />
             <span style={{ color: '#cbd5e1' }}>
-              Backend: <strong>{health?.status === 'UP' ? 'Online' : 'Offline'}</strong>
+              Backend: <strong>{health?.status === 'UP' ? 'Online' : (isWakingBackend ? 'Waking...' : 'Offline')}</strong>
             </span>
           </div>
         </div>
       </header>
+
+      {/* Render Free-Tier Cold-Start Wake-Up Banner */}
+      {isWakingBackend && (
+        <div style={{
+          background: 'linear-gradient(90deg, rgba(245, 158, 11, 0.18) 0%, rgba(217, 119, 6, 0.22) 100%)',
+          borderBottom: '1px solid rgba(245, 158, 11, 0.45)',
+          padding: '10px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '10px',
+          color: '#fbbf24',
+          fontSize: '12px',
+          fontWeight: 600,
+          textAlign: 'center'
+        }}>
+          <RefreshCw size={14} className="spin" style={{ flexShrink: 0 }} />
+          <span>{wakeProgress || 'Waking cloud backend (Render cold start)...'}</span>
+        </div>
+      )}
 
       {/* 2. Navigation Drawer */}
       <NavigationDrawer

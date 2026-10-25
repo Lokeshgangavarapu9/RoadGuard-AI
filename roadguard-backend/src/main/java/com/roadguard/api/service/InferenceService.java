@@ -283,30 +283,41 @@ public class InferenceService {
         int inputW = 512;
         int inputH = 512;
 
-        BufferedImage resized = new BufferedImage(inputW, inputH, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2d = resized.createGraphics();
+        // Aspect-ratio-preserving letterbox resize (padded with YOLO standard gray 114)
+        int origW = original.getWidth();
+        int origH = original.getHeight();
+        float scale = Math.min((float) inputW / origW, (float) inputH / origH);
+        int newW = Math.round(origW * scale);
+        int newH = Math.round(origH * scale);
+        int padX = (inputW - newW) / 2;
+        int padY = (inputH - newH) / 2;
+
+        BufferedImage letterboxed = new BufferedImage(inputW, inputH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = letterboxed.createGraphics();
+        g2d.setColor(new Color(114, 114, 114));
+        g2d.fillRect(0, 0, inputW, inputH);
         g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g2d.drawImage(original, 0, 0, inputW, inputH, null);
+        g2d.drawImage(original, padX, padY, newW, newH, null);
         g2d.dispose();
 
         FloatBuffer buffer = FloatBuffer.allocate(1 * 3 * inputH * inputW);
         for (int y = 0; y < inputH; y++) {
             for (int x = 0; x < inputW; x++) {
-                int rgb = resized.getRGB(x, y);
+                int rgb = letterboxed.getRGB(x, y);
                 float r = ((rgb >> 16) & 0xFF) / 255.0f;
                 buffer.put(r);
             }
         }
         for (int y = 0; y < inputH; y++) {
             for (int x = 0; x < inputW; x++) {
-                int rgb = resized.getRGB(x, y);
+                int rgb = letterboxed.getRGB(x, y);
                 float g = ((rgb >> 8) & 0xFF) / 255.0f;
                 buffer.put(g);
             }
         }
         for (int y = 0; y < inputH; y++) {
             for (int x = 0; x < inputW; x++) {
-                int rgb = resized.getRGB(x, y);
+                int rgb = letterboxed.getRGB(x, y);
                 float b = (rgb & 0xFF) / 255.0f;
                 buffer.put(b);
             }
@@ -344,10 +355,17 @@ public class InferenceService {
                         det.classId = bestClass;
                         det.classLabel = CLASS_NAMES[bestClass];
                         det.confidence = maxScore;
-                        det.x1 = Math.max(0.0f, Math.min(1.0f, (cx - w / 2.0f) / inputW));
-                        det.y1 = Math.max(0.0f, Math.min(1.0f, (cy - h / 2.0f) / inputH));
-                        det.x2 = Math.max(0.0f, Math.min(1.0f, (cx + w / 2.0f) / inputW));
-                        det.y2 = Math.max(0.0f, Math.min(1.0f, (cy + h / 2.0f) / inputH));
+
+                        // Unpad bounding box coordinates to original aspect ratio [0.0, 1.0]
+                        float x1Unpad = (cx - w / 2.0f - padX) / (float) newW;
+                        float y1Unpad = (cy - h / 2.0f - padY) / (float) newH;
+                        float x2Unpad = (cx + w / 2.0f - padX) / (float) newW;
+                        float y2Unpad = (cy + h / 2.0f - padY) / (float) newH;
+
+                        det.x1 = Math.max(0.0f, Math.min(1.0f, x1Unpad));
+                        det.y1 = Math.max(0.0f, Math.min(1.0f, y1Unpad));
+                        det.x2 = Math.max(0.0f, Math.min(1.0f, x2Unpad));
+                        det.y2 = Math.max(0.0f, Math.min(1.0f, y2Unpad));
                         rawCandidates.add(det);
                     }
                 }
