@@ -1,0 +1,56 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+
+# BlueJ files
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files #
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs, see http://www.oracle.com/technetwork/java/javase/tech/troubleshoot-faq-142077.html
+hs_err_pid*
+replay_pid*
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Node & Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Environment & IDE
+.env
+.env.local
+.vscode/
+.idea/
+*.iml
+
+# RoadGuard AI Data & Models (Keep large weights out of git)
+models/*.onnx
+roadguard-backend/models/*.onnx
+uploads/
+roadguard-backend/uploads/
+test-images/
