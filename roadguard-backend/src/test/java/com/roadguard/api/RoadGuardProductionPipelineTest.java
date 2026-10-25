@@ -290,4 +290,23 @@ public class RoadGuardProductionPipelineTest {
         assertEquals("NHAI-AP-2026-984321", confirmation.officialRefId());
         assertEquals(RoadIssue.IssueStatus.COMPLAINT_SUBMITTED, issue.getStatus());
     }
+
+    @Test
+    @DisplayName("Deduplication: Haversine distance and circular heading delta calculations")
+    public void testGeospatialDeduplicationCalculations() {
+        // Known distance: ~111 meters per 0.001 deg latitude
+        double distance = deduplicationService.calculateDistanceMeters(16.5000, 80.6400, 16.5010, 80.6400);
+        assertTrue(distance > 105.0 && distance < 115.0, "Haversine distance should be approx 111m: " + distance);
+
+        // Circular heading delta test (e.g. 10 deg and 350 deg should have delta = 20 deg)
+        double headingDelta1 = deduplicationService.calculateHeadingDelta(10.0, 350.0);
+        assertEquals(20.0, headingDelta1, 0.001);
+
+        // Opposite direction test (e.g. 90 deg and 270 deg should have delta = 180 deg)
+        double headingDelta2 = deduplicationService.calculateHeadingDelta(90.0, 270.0);
+        assertEquals(180.0, headingDelta2, 0.001);
+
+        // Heading delta > 45 deg exceeds maximum threshold
+        assertTrue(headingDelta2 > GeospatialDeduplicationService.MAX_HEADING_DELTA_DEG);
+    }
 }

@@ -95,10 +95,12 @@ public class ImageQualityService {
         // Laplacian variance sharpness
         double sharpness = calculateLaplacianVariance(img);
         if (sharpness < MIN_SHARPNESS_LAPLACIAN) {
+            log.debug("Image rejected for blur: sharpness={}, threshold={}", sharpness, MIN_SHARPNESS_LAPLACIAN);
             return new ImageQualityResult(false, "BLURRY", sharpness, brightness, sha256, width, height,
                 String.format("Image is motion blurred or out of focus (sharpness: %.1f < %.1f)", sharpness, MIN_SHARPNESS_LAPLACIAN));
         }
 
+        log.debug("Image passed quality gate: sharpness={}, brightness={}", sharpness, brightness);
         return new ImageQualityResult(true, "CLEAR", sharpness, brightness, sha256, width, height, null);
     }
 

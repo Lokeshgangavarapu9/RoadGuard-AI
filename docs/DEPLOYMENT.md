@@ -1,6 +1,7 @@
 # RoadGuard AI — Production Deployment Guide
 
 This document provides complete instructions for deploying the **RoadGuard AI** platform to production:
+
 - **Frontend**: React + Vite deployed to **Vercel**
 - **Backend**: Java 21 / Spring Boot 3.3.5 + ONNX Runtime container deployed to a **Java/Docker compatible host** (Render, Railway, or Google Cloud Run)
 - **Database**: Managed **PostgreSQL** for journey, defect, and audit persistence
@@ -10,7 +11,7 @@ This document provides complete instructions for deploying the **RoadGuard AI** 
 
 ## 1. Architecture & Deployment Topology
 
-```
+```text
 +-------------------------------------------------------------------------+
 |                              CITIZEN CLIENT                             |
 |          Web Browser (Mobile PWA / Desktop Chrome, Edge, Safari)        |
@@ -46,6 +47,7 @@ This document provides complete instructions for deploying the **RoadGuard AI** 
 ## 2. Frontend Deployment (Vercel)
 
 ### 2.1 Configuration Settings
+
 When importing the GitHub repository (`https://github.com/Lokeshgangavarapu9/RoadGuard-AI`) into Vercel:
 
 | Setting | Value | Notes |
@@ -58,7 +60,9 @@ When importing the GitHub repository (`https://github.com/Lokeshgangavarapu9/Roa
 | **Install Command** | `npm install` | Default |
 
 ### 2.2 SPA Routing Rewrite (`vercel.json`)
+
 Because RoadGuard AI uses client-side routing, `roadguard-frontend/vercel.json` provides the rewrite rule:
+
 ```json
 {
   "framework": "vite",
@@ -74,6 +78,7 @@ Because RoadGuard AI uses client-side routing, `roadguard-frontend/vercel.json` 
 ```
 
 ### 2.3 Frontend Environment Variables
+
 In the Vercel dashboard (**Project Settings** &rarr; **Environment Variables**):
 
 | Variable Name | Example Value | Description |
@@ -87,7 +92,9 @@ In the Vercel dashboard (**Project Settings** &rarr; **Environment Variables**):
 ## 3. Backend Deployment (Spring Boot + ONNX Runtime)
 
 ### 3.1 Host Selection & Native Library Requirements
+
 The backend uses **Microsoft ONNX Runtime Java** (`onnxruntime4j_jni.so`) to run the YOLO11s road-damage model locally inside the JVM.
+
 - **MANDATORY**: The runtime environment **MUST use glibc** (Ubuntu or Debian base image).
 - **INCOMPATIBLE**: Alpine Linux (`musl libc`) will throw an `UnsatisfiedLinkError` when ONNX loads native bindings.
 - **DOCKER BASE**: The project provides a multi-stage `Dockerfile` using `eclipse-temurin:21-jre-jammy` (Ubuntu 22.04 LTS).
@@ -95,7 +102,9 @@ The backend uses **Microsoft ONNX Runtime Java** (`onnxruntime4j_jni.so`) to run
 ### 3.2 Recommended Hosting Providers
 
 #### Option A: Render (Free Tier Blueprint)
+
 A ready-to-use `render.yaml` is provided in the repository root configured for Render's **Free Tier**.
+
 1. Connect your GitHub account to [Render](https://render.com).
 2. Click **New +** &rarr; **Blueprint**.
 3. Select `RoadGuard-AI`.
@@ -109,6 +118,7 @@ A ready-to-use `render.yaml` is provided in the repository root configured for R
 > Render's Free tier does not support attached persistent disks. Evidence image uploads will be stored on the container's local filesystem (`/app/uploads/evidence`). While all journeys, telemetry, GPS coordinates, and defect metadata persist permanently in the PostgreSQL database, raw photograph files on the ephemeral filesystem reset when Render spins down the free container due to inactivity. For persistent image files across restarts without a paid disk, an external object store (S3/Cloudflare R2/GCS) can be configured.
 
 #### Option B: Railway
+
 1. Create a new project on [Railway](https://railway.app).
 2. Add a **PostgreSQL** database.
 3. Add a service from GitHub repo pointing to `roadguard-backend/Dockerfile`.
@@ -116,11 +126,15 @@ A ready-to-use `render.yaml` is provided in the repository root configured for R
 5. Connect PostgreSQL environment variables.
 
 #### Option C: Google Cloud Run + Cloud SQL
+
 1. Build and push the container image to Google Artifact Registry:
+
    ```bash
    gcloud builds submit --tag gcr.io/PROJECT_ID/roadguard-backend roadguard-backend
    ```
+
 2. Deploy to Cloud Run with Cloud SQL connection:
+
    ```bash
    gcloud run deploy roadguard-backend \
      --image gcr.io/PROJECT_ID/roadguard-backend \
@@ -131,7 +145,9 @@ A ready-to-use `render.yaml` is provided in the repository root configured for R
    ```
 
 ### 3.3 Backend Dockerfile Architecture
+
 The `roadguard-backend/Dockerfile` is built with repository-root context (`.`):
+
 - **Build Stage**: Eclipse Temurin 21 JDK + Maven dependency caching copying `roadguard-backend/pom.xml` and `roadguard-backend/src`.
 - **Runtime Stage**: Eclipse Temurin 21 JRE Jammy (Ubuntu-based glibc).
 - **Model Included**: Copies `roadguard-backend/models/road_damage_yolo.onnx` (36.1 MB) into `/app/models/`.
@@ -143,12 +159,15 @@ The `roadguard-backend/Dockerfile` is built with repository-root context (`.`):
 ## 4. Database & Evidence Storage Persistence
 
 ### 4.1 Production Database Blocker (H2 In-Memory)
+
 > [!CAUTION]
 > In local development, the backend defaults to H2 in-memory (`jdbc:h2:mem:roadguard`).
 > **Never use H2 in-memory in production.** Any container restart or redeployment will destroy all journeys, defect records, and audit history.
 
 ### 4.2 PostgreSQL Production Setup
+
 Set the following backend environment variables to connect to your production PostgreSQL database:
+
 ```env
 SPRING_DATASOURCE_URL=jdbc:postgresql://<host>:5432/<dbname>
 SPRING_DATASOURCE_USERNAME=<user>
@@ -158,10 +177,13 @@ SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
 SPRING_FLYWAY_ENABLED=true
 SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
 ```
+
 The application includes `org.postgresql:postgresql` and `flyway-database-postgresql` drivers. In addition, `DatabaseConfig` automatically normalizes cloud URI formats (`postgres://...` or `postgresql://...`) into valid JDBC URLs on startup. Flyway will automatically run baseline migrations.
 
 ### 4.3 Evidence Storage Volume & Limitations
+
 Road defect complaint verification requires high-resolution camera images.
+
 - Uploads are written to `ROADGUARD_UPLOAD_DIR` (default: `/app/uploads/evidence`).
 - On free-tier cloud containers (Render Free), local storage is ephemeral and resets on restart. Journey and defect metadata remain safe in PostgreSQL.
 - On platforms supporting persistent disks (Render Starter with disk, or Railway), mount a persistent volume at `/app/uploads` to preserve photos across redeployments.
@@ -171,12 +193,14 @@ Road defect complaint verification requires high-resolution camera images.
 ## 5. Network Security & CORS Configuration
 
 RoadGuard AI implements strict CORS validation across both Spring Security and Spring MVC:
+
 - **Allowed Origins**: `https://*.vercel.app`, `http://localhost:5173`, and your custom production domain.
 - **Wildcard Policy**: `*` origin with credentials is **strictly prohibited** to prevent cross-site request forgery and data leakage.
 - **Preflight Support**: Explicit HTTP `OPTIONS` requests are permitted for all API endpoints (`/api/**`) and evidence asset endpoints (`/uploads/**`).
 - **Exposed Headers**: `Authorization`, `Content-Type`, `X-Requested-With`, `Accept`.
 
 To add a custom production domain, update the `ROADGUARD_CORS_ALLOWED_ORIGINS` environment variable:
+
 ```env
 ROADGUARD_CORS_ALLOWED_ORIGINS=https://roadguard.yourdomain.com,https://*.vercel.app
 ```
@@ -186,11 +210,13 @@ ROADGUARD_CORS_ALLOWED_ORIGINS=https://roadguard.yourdomain.com,https://*.vercel
 ## 6. Complete Environment Variables Reference
 
 ### Frontend Variables (Vercel)
+
 | Variable | Required | Default | Description |
 | :--- | :---: | :--- | :--- |
 | `VITE_API_BASE_URL` | **Yes** | `""` (relative) | Backend HTTPS origin (e.g., `https://api.roadguard.ai`) |
 
 ### Backend Variables (Java Host)
+
 | Variable | Required in Prod | Default | Description |
 | :--- | :---: | :--- | :--- |
 | `PORT` | Auto | `8080` | Web server port (set automatically by Render / Cloud Run) |
@@ -210,18 +236,22 @@ ROADGUARD_CORS_ALLOWED_ORIGINS=https://roadguard.yourdomain.com,https://*.vercel
 ## 7. Step-by-Step Deployment Walkthrough
 
 ### Step 1: Deploy Backend & Database
+
 1. Push all latest changes to GitHub: `git push origin main`.
 2. Open [Render.com](https://render.com) (or Railway/Cloud Run).
 3. Create a **New Blueprint Instance** and select `Lokeshgangavarapu9/RoadGuard-AI`.
 4. Wait for PostgreSQL and the Docker container to build and become healthy.
 5. Copy your public backend URL: `https://roadguard-backend-xxxx.onrender.com`.
 6. Test backend health:
+
    ```bash
    curl -i https://roadguard-backend-xxxx.onrender.com/api/v1/health
    ```
+
    Expected response: `{"status":"UP","activeJourneys":0,...}`
 
 ### Step 2: Deploy Frontend on Vercel
+
 1. Log in to [Vercel](https://vercel.com).
 2. Click **Add New...** &rarr; **Project**.
 3. Import `Lokeshgangavarapu9/RoadGuard-AI`.
@@ -232,6 +262,7 @@ ROADGUARD_CORS_ALLOWED_ORIGINS=https://roadguard.yourdomain.com,https://*.vercel
 7. Once deployed, open your `https://roadguard-xxxx.vercel.app` URL.
 
 ### Step 3: End-to-End Verification
+
 1. Open the Vercel site in your browser.
 2. Verify system health indicator turns green (**System Online**).
 3. Start a journey in **Live Monitoring** mode.

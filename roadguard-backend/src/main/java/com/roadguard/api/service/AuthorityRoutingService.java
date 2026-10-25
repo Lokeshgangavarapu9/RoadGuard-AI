@@ -61,6 +61,8 @@ public class AuthorityRoutingService {
         String name = (roadName != null) ? roadName.trim() : "";
         String type = (roadType != null) ? roadType.trim().toLowerCase() : "";
 
+        log.debug("Determining authority routing for lat={}, lon={}, ref={}, name={}, type={}", latitude, longitude, ref, name, type);
+
         Map<String, Object> evidence = new HashMap<>();
         evidence.put("latitude", latitude);
         evidence.put("longitude", longitude);
