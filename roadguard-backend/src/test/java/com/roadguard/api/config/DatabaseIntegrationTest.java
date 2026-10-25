@@ -65,10 +65,11 @@ public class DatabaseIntegrationTest {
         ResponseEntity<HealthResponse> response = restTemplate.getForEntity("/api/v1/health", HealthResponse.class);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("UP", response.getBody().getStatus());
-        assertNotNull(response.getBody().getDatabase());
-        assertTrue(response.getBody().getDatabase().contains("H2") || response.getBody().getDatabase().contains("PostgreSQL"),
+        HealthResponse body = response.getBody();
+        assertNotNull(body);
+        assertEquals("UP", body.getStatus());
+        assertNotNull(body.getDatabase());
+        assertTrue(body.getDatabase().contains("H2") || body.getDatabase().contains("PostgreSQL"),
             "Database should be dynamically reported (H2 or PostgreSQL)");
     }
 
@@ -92,9 +93,10 @@ public class DatabaseIntegrationTest {
         );
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertNotNull(response.getBody().getId(), "Created journey should have non-null ID");
-        assertEquals(com.roadguard.api.entity.Journey.JourneyStatus.ACTIVE, response.getBody().getStatus());
-        assertEquals("Lokesh Kumar", response.getBody().getRiderName());
+        com.roadguard.api.dto.JourneyResponse jBody = response.getBody();
+        assertNotNull(jBody);
+        assertNotNull(jBody.getId(), "Created journey should have non-null ID");
+        assertEquals(com.roadguard.api.entity.Journey.JourneyStatus.ACTIVE, jBody.getStatus());
+        assertEquals("Lokesh Kumar", jBody.getRiderName());
     }
 }

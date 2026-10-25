@@ -2,7 +2,6 @@ package com.roadguard.api;
 
 import com.roadguard.api.entity.ConnectedPortal;
 import com.roadguard.api.entity.UserProfile;
-import com.roadguard.api.repository.ConnectedPortalRepository;
 import com.roadguard.api.repository.UserProfileRepository;
 import com.roadguard.api.service.UserProfileService;
 import org.junit.jupiter.api.MethodOrderer;
@@ -33,9 +32,6 @@ public class DatabaseMigrationTest {
 
     @Autowired
     private UserProfileRepository profileRepository;
-
-    @Autowired
-    private ConnectedPortalRepository portalRepository;
 
     @Test
     @Order(1)

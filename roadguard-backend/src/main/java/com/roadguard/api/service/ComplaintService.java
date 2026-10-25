@@ -15,14 +15,17 @@ public class ComplaintService {
 
     private final ComplaintAgentService complaintAgentService;
 
+    @Deprecated
     public ComplaintService(ComplaintAgentService complaintAgentService) {
         this.complaintAgentService = complaintAgentService;
     }
 
+    @Deprecated
     public Complaint autoDraftComplaint(Long issueId, String complainantName, String complainantEmail, String complainantPhone) {
         return complaintAgentService.prepareComplaint(issueId, complainantName, complainantEmail, complainantPhone);
     }
 
+    @Deprecated
     public SimulateSubmissionResponse simulateSubmission(Long complaintId) {
         ComplaintAgentService.PortalHandoffPacket packet = complaintAgentService.initiatePortalHandoff(complaintId);
         SimulateSubmissionResponse resp = new SimulateSubmissionResponse();

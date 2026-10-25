@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/issues")
+@SuppressWarnings("null")
 public class RoadIssueController {
 
     private final RoadIssueRepository issueRepository;

@@ -22,6 +22,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@SuppressWarnings("null")
 public class JourneyService {
 
     private static final Logger log = LoggerFactory.getLogger(JourneyService.class);

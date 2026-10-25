@@ -37,7 +37,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             // Disable CSRF for REST API (stateless)
-            .csrf(AbstractHttpConfigurer::disable)
+            .csrf(csrf -> csrf.disable())
             // CORS configuration
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             // Session management: stateless for API

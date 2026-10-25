@@ -223,12 +223,12 @@ ROADGUARD_CORS_ALLOWED_ORIGINS=https://roadguard.yourdomain.com,https://*.vercel
 | `SPRING_DATASOURCE_URL` | **Yes** | `jdbc:h2:mem:...` | PostgreSQL JDBC connection string |
 | `SPRING_DATASOURCE_USERNAME` | **Yes** | `sa` | PostgreSQL database user |
 | `SPRING_DATASOURCE_PASSWORD` | **Yes** | `""` | PostgreSQL database password |
-| `SPRING_DATASOURCE_DRIVER_CLASS_NAME`| **Yes** | `org.h2.Driver` | `org.postgresql.Driver` |
+| `SPRING_DATASOURCE_DRIVER_CLASS_NAME` | **Yes** | `org.h2.Driver` | `org.postgresql.Driver` |
 | `SPRING_JPA_DATABASE_PLATFORM` | **Yes** | `org.hibernate...H2Dialect` | `org.hibernate.dialect.PostgreSQLDialect` |
 | `SPRING_FLYWAY_ENABLED` | No | `true` | Runs database migrations |
 | `ROADGUARD_CORS_ALLOWED_ORIGINS` | **Yes** | `localhost,*.vercel.app` | Comma-separated allowed frontend origins |
 | `ROADGUARD_UPLOAD_DIR` | No | `./uploads/evidence` | Disk directory for evidence images |
-| `ROADGUARD_MODEL_PATH` | No | `models/road_damage_yolo.onnx`| Path to YOLO11s ONNX weights |
+| `ROADGUARD_MODEL_PATH` | No | `models/road_damage_yolo.onnx` | Path to YOLO11s ONNX weights |
 | `H2_CONSOLE_ENABLED` | No | `false` | Must remain `false` in production |
 
 ---

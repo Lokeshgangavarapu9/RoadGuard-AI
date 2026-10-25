@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
  * with strict anti-fabrication guards, multi-tier jurisdiction routing, and citizen-assisted handoff.
  */
 @Service
+@SuppressWarnings("null")
 public class ComplaintAgentService {
 
     private static final Logger log = LoggerFactory.getLogger(ComplaintAgentService.class);

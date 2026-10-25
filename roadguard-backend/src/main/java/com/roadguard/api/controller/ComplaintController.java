@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/complaints")
+@SuppressWarnings("null")
 public class ComplaintController {
 
     private final ComplaintAgentService complaintAgentService;

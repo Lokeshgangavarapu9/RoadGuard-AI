@@ -24,9 +24,10 @@ public class WebConfig implements WebMvcConfigurer {
     private String[] allowedOrigins;
 
     @Override
-    public void addCorsMappings(org.springframework.web.servlet.config.annotation.CorsRegistry registry) {
+    public void addCorsMappings(@org.springframework.lang.NonNull org.springframework.web.servlet.config.annotation.CorsRegistry registry) {
+        String[] origins = (allowedOrigins != null) ? allowedOrigins : new String[0];
         registry.addMapping("/api/**")
-                .allowedOrigins(allowedOrigins)
+                .allowedOrigins(origins)
                 .allowedOriginPatterns("https://*.vercel.app")
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers")
@@ -35,7 +36,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .maxAge(3600);
 
         registry.addMapping("/uploads/**")
-                .allowedOrigins(allowedOrigins)
+                .allowedOrigins(origins)
                 .allowedOriginPatterns("https://*.vercel.app")
                 .allowedMethods("GET", "OPTIONS")
                 .allowedHeaders("Authorization", "Content-Type", "Accept", "Origin")
@@ -44,7 +45,7 @@ public class WebConfig implements WebMvcConfigurer {
     }
 
     @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    public void addResourceHandlers(@org.springframework.lang.NonNull ResourceHandlerRegistry registry) {
         // Serve evidence files from local filesystem
         File uploadDir = new File(localStoragePath);
         if (!uploadDir.exists()) {
