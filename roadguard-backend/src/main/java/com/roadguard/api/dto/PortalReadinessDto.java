@@ -1,7 +1,6 @@
 package com.roadguard.api.dto;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * DTO detailing the readiness of the citizen's profile for filing on a specific government portal.

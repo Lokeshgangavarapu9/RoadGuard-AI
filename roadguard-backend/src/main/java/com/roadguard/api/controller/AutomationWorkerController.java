@@ -16,7 +16,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/automation")
-@SuppressWarnings("null")
 public class AutomationWorkerController {
 
     private final AutomationWorkerService workerService;
