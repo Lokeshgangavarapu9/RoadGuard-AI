@@ -3,16 +3,12 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap } from
 import L from 'leaflet';
 import {
   AlertTriangle,
-  ShieldCheck,
-  MapPin,
-  ExternalLink,
   FileText,
-  Navigation,
   Crosshair,
-  Flag,
-  CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  Clock
 } from 'lucide-react';
+import { isValidCoordinate, isFixStale, calculateFixAgeSeconds } from '../utils/geoUtils';
 
 // Custom Map Marker Generator
 function createMarkerIcon(color, pulse = false, innerSymbol = '') {
@@ -60,9 +56,12 @@ function createMarkerIcon(color, pulse = false, innerSymbol = '') {
   });
 }
 
-// Directional Heading Vehicle Marker
-function createVehicleMarkerIcon(heading = null) {
+// Directional Heading Vehicle Marker (supports live and stale states)
+function createVehicleMarkerIcon(heading = null, isStale = false) {
   const hasHeading = heading != null && !isNaN(heading);
+  const color = isStale ? '#f59e0b' : '#00f5a0';
+  const pulseRgba = isStale ? 'rgba(245, 158, 11, 0.3)' : 'rgba(0, 245, 160, 0.25)';
+
   return L.divIcon({
     className: 'custom-vehicle-marker',
     html: `
@@ -81,16 +80,16 @@ function createVehicleMarkerIcon(heading = null) {
           width: 40px;
           height: 40px;
           border-radius: 50%;
-          background: rgba(0, 245, 160, 0.25);
+          background: ${pulseRgba};
           animation: pulse-ring 2.5s infinite;
         "></div>
         <div style="
           width: 22px;
           height: 22px;
           border-radius: 50%;
-          background: #00f5a0;
+          background: ${color};
           border: 3px solid #ffffff;
-          box-shadow: 0 0 14px #00f5a0;
+          box-shadow: 0 0 14px ${color};
           display: flex;
           align-items: center;
           justify-content: center;
@@ -128,7 +127,7 @@ const ICONS = {
 };
 
 // Map Recenter & Auto-Follow Handler
-function MapController({ center, autoFollow, onUserPan }) {
+function MapController({ center, autoFollow, onUserPan, hasValidGps }) {
   const map = useMap();
 
   useEffect(() => {
@@ -140,10 +139,10 @@ function MapController({ center, autoFollow, onUserPan }) {
   }, [map, onUserPan]);
 
   useEffect(() => {
-    if (autoFollow && center && center[0] && center[1]) {
+    if (autoFollow && hasValidGps && center && center[0] && center[1]) {
       map.setView(center, map.getZoom(), { animate: true });
     }
-  }, [center, autoFollow, map]);
+  }, [center, autoFollow, hasValidGps, map]);
 
   return null;
 }
@@ -157,15 +156,25 @@ export default function MapViewer({
   gpsError = null,
   onRetryGps
 }) {
-  const defaultCenter = [16.5062, 80.6480]; // Andhra Pradesh Corridor fallback
-  const center = currentLocation ? [currentLocation.lat, currentLocation.lon] : defaultCenter;
+  const hasValidGps = currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon);
+  const isStale = hasValidGps && isFixStale(currentLocation.timestamp, 20000);
+  const fixAgeSec = hasValidGps ? calculateFixAgeSeconds(currentLocation.timestamp) : null;
+
+  // Viewport center fallback (Corridor area), purely for map initialization
+  const defaultCenter = [16.5062, 80.6480];
+  const center = hasValidGps ? [currentLocation.lat, currentLocation.lon] : defaultCenter;
 
   const [autoFollow, setAutoFollow] = useState(true);
-  const [tileError, setTileError] = useState(false);
+  const [_tileError, setTileError] = useState(false);
   const mapRef = useRef(null);
 
+  // Validate all coordinates in path
   const polylineCoords = path
-    .filter((p) => p && (p.latitude || p.lat) && (p.longitude || p.lon))
+    .filter((p) => {
+      const lat = p?.latitude || p?.lat;
+      const lon = p?.longitude || p?.lon;
+      return isValidCoordinate(lat, lon);
+    })
     .map((p) => [p.latitude || p.lat, p.longitude || p.lon]);
 
   const startPoint = polylineCoords.length > 0 ? polylineCoords[0] : null;
@@ -173,7 +182,7 @@ export default function MapViewer({
 
   function handleRecenter() {
     setAutoFollow(true);
-    if (currentLocation && mapRef.current) {
+    if (hasValidGps && mapRef.current) {
       mapRef.current.setView([currentLocation.lat, currentLocation.lon], 16, { animate: true });
     }
   }
@@ -199,6 +208,7 @@ export default function MapViewer({
         <MapController
           center={center}
           autoFollow={autoFollow}
+          hasValidGps={hasValidGps}
           onUserPan={() => setAutoFollow(false)}
         />
 
@@ -238,29 +248,32 @@ export default function MapViewer({
           </Marker>
         )}
 
-        {/* GPS Accuracy Circle */}
-        {currentLocation && currentLocation.accuracy && currentLocation.accuracy > 0 && (
+        {/* GPS Accuracy Circle (only rendered when GPS fix is valid) */}
+        {hasValidGps && currentLocation.accuracy && currentLocation.accuracy > 0 && (
           <Circle
             center={[currentLocation.lat, currentLocation.lon]}
-            radius={Math.min(currentLocation.accuracy, 200)}
+            radius={Math.min(currentLocation.accuracy, 300)}
             pathOptions={{
-              color: currentLocation.accuracy > 25 ? '#f59e0b' : '#00f5a0',
-              fillColor: currentLocation.accuracy > 25 ? '#f59e0b' : '#00f5a0',
-              fillOpacity: 0.12,
+              color: isStale ? '#f59e0b' : (currentLocation.accuracy > 25 ? '#f59e0b' : '#00f5a0'),
+              fillColor: isStale ? '#f59e0b' : (currentLocation.accuracy > 25 ? '#f59e0b' : '#00f5a0'),
+              fillOpacity: isStale ? 0.08 : 0.15,
               weight: 1
             }}
           />
         )}
 
-        {/* Current Vehicle Position Marker */}
-        {currentLocation && (
+        {/* Current Vehicle Position Marker: ONLY rendered when a genuine GPS fix exists */}
+        {hasValidGps && (
           <Marker
             position={[currentLocation.lat, currentLocation.lon]}
-            icon={createVehicleMarkerIcon(currentLocation.heading)}
+            icon={createVehicleMarkerIcon(currentLocation.heading, isStale)}
           >
             <Popup>
               <div style={{ padding: '6px', fontSize: '12px' }}>
-                <strong style={{ color: '#00f5a0' }}>Live Device Position</strong>
+                <strong style={{ color: isStale ? '#f59e0b' : '#00f5a0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {isStale && <Clock size={12} />}
+                  {isStale ? `Stale GPS Position (${fixAgeSec}s ago)` : 'Live Device Position'}
+                </strong>
                 <div style={{ marginTop: '4px', color: '#cbd5e1' }}>
                   <div>Lat: {currentLocation.lat.toFixed(5)}° | Lon: {currentLocation.lon.toFixed(5)}°</div>
                   <div>Speed: {currentLocation.speed ? `${(currentLocation.speed * 3.6).toFixed(1)} km/h` : 'Stationary / 0 km/h'}</div>
@@ -269,90 +282,97 @@ export default function MapViewer({
                       GPS Accuracy: &plusmn;{currentLocation.accuracy.toFixed(0)}m
                     </div>
                   )}
+                  {isStale && (
+                    <div style={{ marginTop: '4px', fontSize: '11px', color: '#f59e0b' }}>
+                      Position has not updated recently.
+                    </div>
+                  )}
                 </div>
               </div>
             </Popup>
           </Marker>
         )}
 
-        {/* Confirmed Road Defect Markers */}
-        {issues.map((issue) => {
-          const icon = ICONS[issue.defectClass] || ICONS.DEFAULT;
-          const isPothole = issue.defectClass === 'POTHOLE';
+        {/* Confirmed Road Defect Markers (validated coordinates only) */}
+        {issues
+          .filter((issue) => isValidCoordinate(issue.latitude, issue.longitude))
+          .map((issue) => {
+            const icon = ICONS[issue.defectClass] || ICONS.DEFAULT;
+            const isPothole = issue.defectClass === 'POTHOLE';
 
-          return (
-            <Marker key={issue.id} position={[issue.latitude, issue.longitude]} icon={icon}>
-              <Popup>
-                <div style={{ minWidth: '220px', padding: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{
-                      background: isPothole ? 'rgba(255, 51, 102, 0.15)' : 'rgba(255, 183, 3, 0.15)',
-                      color: isPothole ? '#ff3366' : '#ffb703',
-                      fontWeight: 700,
-                      fontSize: '11px',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      textTransform: 'uppercase'
-                    }}>
-                      {issue.defectClass?.replace('_', ' ')}
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#64748b' }}>
-                      Conf: {((issue.confidenceScore || 0.85) * 100).toFixed(0)}%
-                    </span>
-                  </div>
-
-                  <h4 style={{ margin: '0 0 6px', fontSize: '14px', color: '#0f172a' }}>
-                    {issue.roadName || 'Public Road Defect'}
-                  </h4>
-
-                  <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#475569', lineHeight: 1.4 }}>
-                    {issue.address || `${issue.latitude.toFixed(5)}°N, ${issue.longitude.toFixed(5)}°E`}
-                  </p>
-
-                  <div style={{
-                    background: issue.dlpApplicable ? '#ecfdf5' : '#f1f5f9',
-                    border: `1px solid ${issue.dlpApplicable ? '#a7f3d0' : '#cbd5e1'}`,
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    marginBottom: '10px',
-                    fontSize: '11px'
-                  }}>
-                    {issue.dlpApplicable ? (
-                      <span style={{ color: '#059669', fontWeight: 600 }}>
-                        Active Contractor DLP Warranty
+            return (
+              <Marker key={issue.id} position={[issue.latitude, issue.longitude]} icon={icon}>
+                <Popup>
+                  <div style={{ minWidth: '220px', padding: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{
+                        background: isPothole ? 'rgba(255, 51, 102, 0.15)' : 'rgba(255, 183, 3, 0.15)',
+                        color: isPothole ? '#ff3366' : '#ffb703',
+                        fontWeight: 700,
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        textTransform: 'uppercase'
+                      }}>
+                        {issue.defectClass?.replace('_', ' ')}
                       </span>
-                    ) : (
-                      <span style={{ color: '#334155' }}>
-                        Authority: <strong>{issue.authorityCode || 'NHAI'}</strong>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>
+                        Conf: {((issue.confidenceScore || 0.85) * 100).toFixed(0)}%
                       </span>
-                    )}
-                  </div>
+                    </div>
 
-                  <button
-                    onClick={() => onSelectIssue && onSelectIssue(issue)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      background: '#0f172a',
-                      color: '#ffffff',
-                      border: 'none',
+                    <h4 style={{ margin: '0 0 6px', fontSize: '14px', color: '#0f172a' }}>
+                      {issue.roadName || 'Public Road Defect'}
+                    </h4>
+
+                    <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#475569', lineHeight: 1.4 }}>
+                      {issue.address || `${issue.latitude.toFixed(5)}°N, ${issue.longitude.toFixed(5)}°E`}
+                    </p>
+
+                    <div style={{
+                      background: issue.dlpApplicable ? '#ecfdf5' : '#f1f5f9',
+                      border: `1px solid ${issue.dlpApplicable ? '#a7f3d0' : '#cbd5e1'}`,
+                      padding: '6px 8px',
                       borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <FileText size={14} /> File Grievance Letter
-                  </button>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+                      marginBottom: '10px',
+                      fontSize: '11px'
+                    }}>
+                      {issue.dlpApplicable ? (
+                        <span style={{ color: '#059669', fontWeight: 600 }}>
+                          Active Contractor DLP Warranty
+                        </span>
+                      ) : (
+                        <span style={{ color: '#334155' }}>
+                          Authority: <strong>{issue.authorityCode || 'NHAI'}</strong>
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => onSelectIssue && onSelectIssue(issue)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: '#0f172a',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <FileText size={14} /> File Grievance Letter
+                    </button>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
       </MapContainer>
 
       {/* Floating Recenter & Auto-Follow Button */}
@@ -387,7 +407,7 @@ export default function MapViewer({
         </button>
       </div>
 
-      {/* GPS Error or Unavailable Banner */}
+      {/* GPS Error or Lock Timeout Banner */}
       {gpsError && (
         <div style={{
           position: 'absolute',
@@ -395,7 +415,7 @@ export default function MapViewer({
           left: '12px',
           right: '12px',
           zIndex: 500,
-          background: 'rgba(15, 23, 42, 0.92)',
+          background: 'rgba(15, 23, 42, 0.94)',
           border: '1px solid rgba(239, 68, 68, 0.5)',
           borderRadius: '8px',
           padding: '8px 12px',
@@ -403,11 +423,19 @@ export default function MapViewer({
           alignItems: 'center',
           justifyContent: 'space-between',
           fontSize: '12px',
-          color: '#f8fafc'
+          color: '#f8fafc',
+          backdropFilter: 'blur(8px)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={16} color="#ef4444" />
-            <span>{gpsError}</span>
+            <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
+            <div>
+              <span>{gpsError}</span>
+              {hasValidGps && isStale && (
+                <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '2px' }}>
+                  Showing last valid fix from {fixAgeSec}s ago.
+                </div>
+              )}
+            </div>
           </div>
           {onRetryGps && (
             <button
@@ -423,7 +451,8 @@ export default function MapViewer({
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px'
+                gap: '4px',
+                flexShrink: 0
               }}
             >
               <RefreshCw size={12} /> Retry
@@ -432,23 +461,55 @@ export default function MapViewer({
         </div>
       )}
 
-      {/* Poor Accuracy Warning Pill */}
-      {currentLocation && currentLocation.accuracy > 25 && !gpsError && (
+      {/* Awaiting GPS Fix Banner when no error and no valid fix */}
+      {!hasValidGps && !gpsError && (
         <div style={{
           position: 'absolute',
           top: '12px',
           left: '12px',
           zIndex: 500,
-          background: 'rgba(245, 158, 11, 0.15)',
+          background: 'rgba(15, 23, 42, 0.85)',
+          border: '1px solid rgba(0, 245, 160, 0.3)',
+          borderRadius: '6px',
+          padding: '4px 10px',
+          fontSize: '11px',
+          fontWeight: 600,
+          color: '#cbd5e1',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8' }} />
+          <span>Awaiting satellite fix • Default corridor viewport shown</span>
+        </div>
+      )}
+
+      {/* Poor Accuracy Warning Pill */}
+      {hasValidGps && currentLocation.accuracy > 25 && !gpsError && (
+        <div style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          zIndex: 500,
+          background: isStale ? 'rgba(245, 158, 11, 0.2)' : 'rgba(245, 158, 11, 0.15)',
           border: '1px solid rgba(245, 158, 11, 0.4)',
           borderRadius: '6px',
           padding: '4px 10px',
           fontSize: '11px',
           fontWeight: 600,
           color: '#fbbf24',
-          backdropFilter: 'blur(6px)'
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
         }}>
-          GPS Accuracy: &plusmn;{currentLocation.accuracy.toFixed(0)}m (Weak Satellite Fix)
+          {isStale && <Clock size={12} />}
+          <span>
+            {isStale
+              ? `Stale Fix (${fixAgeSec}s ago) • ±${currentLocation.accuracy.toFixed(0)}m`
+              : `GPS Accuracy: ±${currentLocation.accuracy.toFixed(0)}m (Weak Satellite Fix)`}
+          </span>
         </div>
       )}
     </div>

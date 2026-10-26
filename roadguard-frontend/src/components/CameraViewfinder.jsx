@@ -3,17 +3,16 @@ import {
   Camera,
   Compass,
   Gauge,
-  Eye,
-  AlertTriangle,
   RefreshCw,
-  Video,
   VideoOff,
   ShieldAlert,
-  CheckCircle2,
   AlertCircle,
-  Cpu
+  Cpu,
+  Square,
+  Play
 } from 'lucide-react';
 import { uploadEvidenceFrame } from '../api';
+import { isValidCoordinate, isFixStale } from '../utils/geoUtils';
 
 /**
  * Human-friendly defect class names for YOLO11s road-damage model
@@ -36,6 +35,15 @@ function formatDefectName(rawLabel) {
   }
 }
 
+/**
+ * CAMERA LIFECYCLE STATES:
+ * - 'IDLE': Camera is stopped / off (initial state)
+ * - 'REQUESTING_PERMISSION': getUserMedia prompt is awaiting user approval
+ * - 'STARTING': Stream obtained, setting video srcObject and playing
+ * - 'RUNNING': Stream actively playing in video element and ready for inference
+ * - 'STOPPING': Stopping all tracks and releasing camera hardware
+ * - 'ERROR': Camera failed to start (denied, unavailable, security)
+ */
 export default function CameraViewfinder({
   isJourneyActive,
   journeyId,
@@ -52,23 +60,39 @@ export default function CameraViewfinder({
   const streamRef = useRef(null);
   const wakeLockRef = useRef(null);
   const inFlightInferenceRef = useRef(false);
-  const isRequestingCameraRef = useRef(false);
   const frameSeqRef = useRef(1);
 
-  // Camera States: 'PERMISSION_REQUIRED' | 'REQUESTING_PERMISSION' | 'CAMERA_READY' | 'CAMERA_UNAVAILABLE' | 'PERMISSION_DENIED'
-  const [internalCameraState, setInternalCameraState] = useState('PERMISSION_REQUIRED');
-  const cameraState = externalCameraState || internalCameraState;
+  // Generation ID token to cancel late-resolving getUserMedia promises
+  const cameraGenerationRef = useRef(0);
 
-  const updateCameraState = useCallback((newState) => {
-    setInternalCameraState(newState);
-    if (onCameraStateChange) onCameraStateChange(newState);
-    if (onEligibilityChange) onEligibilityChange(newState === 'CAMERA_READY' ? 'READY' : newState);
+  // Internal Camera Lifecycle State Machine
+  const [lifecycleState, setLifecycleState] = useState('IDLE');
+
+  // Map internal state to legacy external state for parent compatibility
+  const updateLifecycleState = useCallback((nextState) => {
+    setLifecycleState(nextState);
+    if (onCameraStateChange) {
+      // Map to legacy states:
+      // 'RUNNING' -> 'CAMERA_READY'
+      // 'REQUESTING_PERMISSION' -> 'REQUESTING_PERMISSION'
+      // 'IDLE' | 'STOPPING' -> 'PERMISSION_REQUIRED'
+      // 'ERROR' -> 'CAMERA_UNAVAILABLE' / 'PERMISSION_DENIED'
+      let mapped = 'PERMISSION_REQUIRED';
+      if (nextState === 'RUNNING') mapped = 'CAMERA_READY';
+      else if (nextState === 'REQUESTING_PERMISSION' || nextState === 'STARTING') mapped = 'REQUESTING_PERMISSION';
+      else if (nextState === 'ERROR') mapped = 'CAMERA_UNAVAILABLE';
+      onCameraStateChange(mapped);
+    }
+    if (onEligibilityChange) {
+      onEligibilityChange(nextState === 'RUNNING' ? 'READY' : nextState);
+    }
   }, [onCameraStateChange, onEligibilityChange]);
 
   const [cameraError, setCameraError] = useState(null);
+  const [errorType, setErrorType] = useState(null); // 'PERMISSION_DENIED' | 'UNAVAILABLE' | 'SECURITY'
   const [detectedBox, setDetectedBox] = useState(null);
   const [lastInferenceStatus, setLastInferenceStatus] = useState(null);
-  const [lastUploadedFrame, setLastUploadedFrame] = useState(null);
+  const [_lastUploadedFrame, setLastUploadedFrame] = useState(null);
   const [frameCount, setFrameCount] = useState(0);
 
   const frameIntervalSec = settings.frameInterval || 2.8;
@@ -93,16 +117,59 @@ export default function CameraViewfinder({
     };
   }, [isJourneyActive]);
 
-  // 2. Start Camera with rear-facing constraint & error classification
+  // 2. Central idempotent stopCamera operation
+  const stopCamera = useCallback(() => {
+    // Invalidate any pending getUserMedia promise or in-flight inference
+    cameraGenerationRef.current += 1;
+    updateLifecycleState('STOPPING');
+    inFlightInferenceRef.current = false;
+
+    // Release all hardware stream tracks immediately
+    if (streamRef.current) {
+      try {
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach((track) => {
+          try {
+            track.stop();
+          } catch (tErr) {
+            console.warn('Track stop warning:', tErr);
+          }
+        });
+      } catch (err) {
+        console.warn('Stream tracks release warning:', err);
+      }
+      streamRef.current = null;
+    }
+
+    // Detach and pause video element
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+      } catch (pErr) {
+        // Ignored
+      }
+      videoRef.current.srcObject = null;
+    }
+
+    setDetectedBox(null);
+    updateLifecycleState('IDLE');
+    setLastInferenceStatus(isJourneyActive ? 'Driving Mode active — Camera stopped' : 'Camera off');
+  }, [isJourneyActive, updateLifecycleState]);
+
+  // 3. Central startCamera operation with cancellation token & error handling
   const startCamera = useCallback(async () => {
-    if (isRequestingCameraRef.current) return;
-    isRequestingCameraRef.current = true;
-    updateCameraState('REQUESTING_PERMISSION');
+    // If currently running, stop first to reset cleanly
+    if (streamRef.current) {
+      stopCamera();
+    }
+
+    const currentGeneration = ++cameraGenerationRef.current;
+    updateLifecycleState('REQUESTING_PERMISSION');
     setCameraError(null);
+    setErrorType(null);
 
     // Verify browser supports mediaDevices
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      isRequestingCameraRef.current = false;
       const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const isLocalhost = typeof window !== 'undefined' && (
         window.location.hostname === 'localhost' ||
@@ -112,7 +179,8 @@ export default function CameraViewfinder({
         ? 'Camera access requires HTTPS or localhost origin. Please load site over HTTPS.'
         : 'Browser MediaDevices API is not supported on this device/browser.';
       setCameraError(msg);
-      updateCameraState('CAMERA_UNAVAILABLE');
+      setErrorType('UNAVAILABLE');
+      updateLifecycleState('ERROR');
       return;
     }
 
@@ -128,6 +196,17 @@ export default function CameraViewfinder({
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Race condition check: If user clicked Stop while getUserMedia was pending, discard immediately!
+      if (cameraGenerationRef.current !== currentGeneration) {
+        console.log('Discarding late-resolving camera stream after stop request');
+        stream.getTracks().forEach((track) => {
+          try { track.stop(); } catch (e) {}
+        });
+        return;
+      }
+
+      updateLifecycleState('STARTING');
       streamRef.current = stream;
 
       if (videoRef.current) {
@@ -136,60 +215,75 @@ export default function CameraViewfinder({
           await videoRef.current.play();
         } catch (playErr) {
           // Autoplay policy fallback: muted video is required by modern browsers
-          videoRef.current.muted = true;
-          await videoRef.current.play();
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            await videoRef.current.play();
+          }
         }
       }
 
+      // Check again if cancelled during play()
+      if (cameraGenerationRef.current !== currentGeneration) {
+        stopCamera();
+        return;
+      }
+
       setCameraError(null);
-      updateCameraState('CAMERA_READY');
+      setErrorType(null);
+      updateLifecycleState('RUNNING');
+      setLastInferenceStatus(isJourneyActive ? 'ONNX vision pipeline monitoring active' : 'Live dashcam feed active');
     } catch (err) {
+      // If cancelled, do not transition to error
+      if (cameraGenerationRef.current !== currentGeneration) {
+        return;
+      }
+
       console.warn('Camera request error:', err.name, err.message);
 
       let userMsg = err.message || 'Failed to start camera';
-      let nextState = 'CAMERA_UNAVAILABLE';
+      let errKind = 'UNAVAILABLE';
 
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        nextState = 'PERMISSION_DENIED';
+        errKind = 'PERMISSION_DENIED';
         userMsg = 'Camera permission was denied. Please allow camera access in browser site settings.';
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        nextState = 'CAMERA_UNAVAILABLE';
+        errKind = 'UNAVAILABLE';
         userMsg = 'No camera hardware found on this device.';
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        nextState = 'CAMERA_UNAVAILABLE';
+        errKind = 'UNAVAILABLE';
         userMsg = 'Camera is currently in use by another application or locked by the system.';
       } else if (err.name === 'SecurityError') {
-        nextState = 'CAMERA_UNAVAILABLE';
+        errKind = 'SECURITY';
         userMsg = 'Camera access blocked due to security restrictions. HTTPS is required.';
       }
 
       setCameraError(userMsg);
-      updateCameraState(nextState);
-    } finally {
-      isRequestingCameraRef.current = false;
+      setErrorType(errKind);
+      updateLifecycleState('ERROR');
     }
-  }, [updateCameraState]);
+  }, [stopCamera, updateLifecycleState, isJourneyActive]);
 
-  // 3. Stop Camera and release hardware tracks
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => {
-        track.stop();
-      });
-      streamRef.current = null;
+  // Synchronize with external camera state changes from parent controls
+  useEffect(() => {
+    if (externalCameraState === 'REQUESTING_PERMISSION' && lifecycleState === 'IDLE') {
+      startCamera();
+    } else if ((externalCameraState === 'PERMISSION_REQUIRED' || externalCameraState === 'IDLE') && lifecycleState === 'RUNNING') {
+      stopCamera();
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    updateCameraState('PERMISSION_REQUIRED');
-  }, [updateCameraState]);
+  }, [externalCameraState, lifecycleState, startCamera, stopCamera]);
 
-  // Cleanup on unmount
+  // Teardown hardware on unmount
   useEffect(() => {
     return () => {
+      cameraGenerationRef.current += 1;
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current.getTracks().forEach((track) => {
+          try { track.stop(); } catch (e) {}
+        });
         streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
     };
   }, []);
@@ -200,30 +294,38 @@ export default function CameraViewfinder({
       frameSeqRef.current = 1;
       setFrameCount(0);
       setDetectedBox(null);
-      setLastInferenceStatus('Drive Mode active — initiating ONNX vision pipeline...');
+      setLastInferenceStatus(
+        lifecycleState === 'RUNNING'
+          ? 'Drive Mode active — initiating ONNX vision pipeline...'
+          : 'Drive Mode active — Camera is stopped (GPS-only route tracking)'
+      );
     } else {
       setDetectedBox(null);
-      setLastInferenceStatus(null);
+      setLastInferenceStatus(lifecycleState === 'RUNNING' ? 'Live dashcam feed active' : null);
     }
-  }, [isJourneyActive]);
+  }, [isJourneyActive, lifecycleState]);
 
   // 5. Live Frame Capture & Real ONNX Inference Loop
   useEffect(() => {
-    if (!isJourneyActive || !journeyId || cameraState !== 'CAMERA_READY') return;
+    // Only capture frames when driving mode is active AND camera is RUNNING
+    if (!isJourneyActive || !journeyId || lifecycleState !== 'RUNNING') {
+      return;
+    }
 
     const interval = setInterval(async () => {
       // Guard: only 1 in-flight inference request at a time to prevent server flooding
-      if (inFlightInferenceRef.current) {
+      if (inFlightInferenceRef.current || lifecycleState !== 'RUNNING') {
         return;
       }
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!video || !canvas || video.readyState < 2) {
+      if (!video || !canvas || video.readyState < 2 || video.paused || video.ended) {
         return;
       }
 
       inFlightInferenceRef.current = true;
+      const currentGen = cameraGenerationRef.current;
 
       try {
         canvas.width = video.videoWidth || 640;
@@ -236,7 +338,8 @@ export default function CameraViewfinder({
           canvas.toBlob(resolve, 'image/jpeg', 0.85);
         });
 
-        if (!blob) {
+        // Abort if camera was stopped while converting blob
+        if (!blob || cameraGenerationRef.current !== currentGen) {
           inFlightInferenceRef.current = false;
           return;
         }
@@ -255,11 +358,16 @@ export default function CameraViewfinder({
           console.warn('WebCrypto SHA-256 unavailable:', hashErr);
         }
 
-        const lat = currentLocation?.lat;
-        const lon = currentLocation?.lon;
+        const rawLat = currentLocation?.lat;
+        const rawLon = currentLocation?.lon;
         const accuracy = currentLocation?.accuracy;
         const heading = currentLocation?.heading;
         const speed = currentLocation?.speed;
+        const timestamp = currentLocation?.timestamp;
+
+        // Verify coordinate validity and freshness
+        const hasValidCoords = isValidCoordinate(rawLat, rawLon);
+        const isStale = isFixStale(timestamp, 30000); // 30-second stale limit
 
         // 3-Tier GPS Policy:
         // Tier 3 (> 50m): Pause automatic sampling to prevent false coordinate pinning
@@ -269,10 +377,14 @@ export default function CameraViewfinder({
           return;
         }
 
+        // Never assign false coordinates if GPS is missing or stale
+        const sanitizedLat = (hasValidCoords && !isStale) ? rawLat : null;
+        const sanitizedLon = (hasValidCoords && !isStale) ? rawLon : null;
+
         // Upload genuine frame to backend ONNX pipeline with verified telemetry
         const resp = await uploadEvidenceFrame(journeyId, file, {
-          latitude: lat,
-          longitude: lon,
+          latitude: sanitizedLat,
+          longitude: sanitizedLon,
           capturedAt: new Date().toISOString(),
           frameSequence: currentSeq,
           gpsAccuracy: accuracy,
@@ -280,6 +392,11 @@ export default function CameraViewfinder({
           speed: speed,
           clientSha256: clientSha256
         });
+
+        // Abort if camera was stopped while upload was in flight
+        if (cameraGenerationRef.current !== currentGen) {
+          return;
+        }
 
         setLastUploadedFrame(resp);
         setFrameCount(currentSeq);
@@ -303,7 +420,11 @@ export default function CameraViewfinder({
           });
 
           setLastInferenceStatus(`Detected: ${defectFormatted} (${confPercent}%) — Frame #${currentSeq}`);
-          setTimeout(() => setDetectedBox(null), 2400);
+          setTimeout(() => {
+            if (cameraGenerationRef.current === currentGen) {
+              setDetectedBox(null);
+            }
+          }, 2400);
 
           if (onNewDetection) onNewDetection();
         } else {
@@ -311,15 +432,19 @@ export default function CameraViewfinder({
           setLastInferenceStatus(`Frame #${currentSeq}: Road surface normal (No defects detected)`);
         }
       } catch (err) {
-        console.warn('Real frame inference error:', err.message);
-        setLastInferenceStatus(`Inference warning: ${err.message}`);
+        if (cameraGenerationRef.current === currentGen) {
+          console.warn('Real frame inference error:', err.message);
+          setLastInferenceStatus(`Inference warning: ${err.message}`);
+        }
       } finally {
-        inFlightInferenceRef.current = false;
+        if (cameraGenerationRef.current === currentGen) {
+          inFlightInferenceRef.current = false;
+        }
       }
     }, frameIntervalSec * 1000);
 
     return () => clearInterval(interval);
-  }, [isJourneyActive, journeyId, cameraState, currentLocation, frameIntervalSec, onFrameProcessed, onNewDetection]);
+  }, [isJourneyActive, journeyId, lifecycleState, currentLocation, frameIntervalSec, onFrameProcessed, onNewDetection]);
 
   // Genuine GPS telemetry formatted for HUD chips
   const hasGenuineGps = currentLocation?.speed != null;
@@ -357,12 +482,12 @@ export default function CameraViewfinder({
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          display: cameraState === 'CAMERA_READY' ? 'block' : 'none'
+          display: lifecycleState === 'RUNNING' ? 'block' : 'none'
         }}
       />
 
-      {/* 2. Camera Placeholder / Action Card when not active */}
-      {cameraState !== 'CAMERA_READY' && (
+      {/* 2. Camera Controls & Status Overlay when Stopped / Inactive / Error */}
+      {lifecycleState !== 'RUNNING' && (
         <div style={{
           width: '100%',
           height: '100%',
@@ -374,8 +499,8 @@ export default function CameraViewfinder({
           padding: '24px',
           textAlign: 'center'
         }}>
-          {cameraState === 'PERMISSION_REQUIRED' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '340px' }}>
+          {lifecycleState === 'IDLE' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '360px' }}>
               <div style={{
                 width: '54px',
                 height: '54px',
@@ -391,10 +516,12 @@ export default function CameraViewfinder({
               </div>
               <div>
                 <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 700, color: '#f8fafc' }}>
-                  Live Dashcam Viewfinder
+                  {isJourneyActive ? 'Driving Mode Active — Camera Stopped' : 'Live Dashcam Viewfinder'}
                 </h4>
                 <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
-                  Real camera frames are analyzed by the on-device or cloud ONNX road-defect detection model.
+                  {isJourneyActive
+                    ? 'GPS route tracking and distance recording are still active. Click Start Camera to resume road-defect detection.'
+                    : 'Real camera frames are analyzed by the on-device or cloud ONNX road-defect detection model.'}
                 </p>
                 <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
                   Requires HTTPS or localhost and browser camera permission.
@@ -412,15 +539,16 @@ export default function CameraViewfinder({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: '0 0 16px rgba(0, 245, 160, 0.3)'
+                  boxShadow: '0 0 16px rgba(0, 245, 160, 0.3)',
+                  cursor: 'pointer'
                 }}
               >
-                <Camera size={16} /> Start Camera
+                <Play size={16} fill="#04121d" /> Start Camera
               </button>
             </div>
           )}
 
-          {cameraState === 'REQUESTING_PERMISSION' && (
+          {lifecycleState === 'REQUESTING_PERMISSION' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
               <RefreshCw size={32} color="#00f5a0" className="spin-animation" />
               <p style={{ margin: 0, fontSize: '13px', color: '#f8fafc', fontWeight: 600 }}>
@@ -429,64 +557,64 @@ export default function CameraViewfinder({
               <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
                 Please select "Allow" on the browser prompt.
               </p>
-            </div>
-          )}
-
-          {cameraState === 'PERMISSION_DENIED' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '340px' }}>
-              <div style={{
-                width: '52px',
-                height: '52px',
-                borderRadius: '50%',
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ef4444'
-              }}>
-                <ShieldAlert size={26} />
-              </div>
-              <div>
-                <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#fca5a5' }}>
-                  Camera Permission Denied
-                </h4>
-                <p style={{ margin: 0, fontSize: '12px', color: '#cbd5e1', lineHeight: 1.4 }}>
-                  {cameraError || 'Camera permission was blocked. Please enable camera in your browser site permissions to capture road imagery.'}
-                </p>
-              </div>
               <button
                 type="button"
-                onClick={startCamera}
+                onClick={stopCamera}
                 className="btn-secondary"
-                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                style={{ marginTop: '8px', padding: '6px 14px', fontSize: '12px' }}
               >
-                <RefreshCw size={14} /> Retry Camera Permission
+                Cancel
               </button>
             </div>
           )}
 
-          {cameraState === 'CAMERA_UNAVAILABLE' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '340px' }}>
+          {lifecycleState === 'STARTING' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <RefreshCw size={32} color="#00f5a0" className="spin-animation" />
+              <p style={{ margin: 0, fontSize: '13px', color: '#f8fafc', fontWeight: 600 }}>
+                Initializing camera feed...
+              </p>
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="btn-secondary"
+                style={{ marginTop: '8px', padding: '6px 14px', fontSize: '12px' }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {lifecycleState === 'STOPPING' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <RefreshCw size={28} color="#94a3b8" className="spin-animation" />
+              <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1', fontWeight: 600 }}>
+                Releasing camera hardware...
+              </p>
+            </div>
+          )}
+
+          {lifecycleState === 'ERROR' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '360px' }}>
               <div style={{
                 width: '52px',
                 height: '52px',
                 borderRadius: '50%',
-                background: 'rgba(245, 158, 11, 0.15)',
-                border: '1px solid rgba(245, 158, 11, 0.35)',
+                background: errorType === 'PERMISSION_DENIED' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                border: `1px solid ${errorType === 'PERMISSION_DENIED' ? 'rgba(239, 68, 68, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#f59e0b'
+                color: errorType === 'PERMISSION_DENIED' ? '#ef4444' : '#f59e0b'
               }}>
-                <VideoOff size={26} />
+                {errorType === 'PERMISSION_DENIED' ? <ShieldAlert size={26} /> : <VideoOff size={26} />}
               </div>
               <div>
-                <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#fef3c7' }}>
-                  Camera Unavailable
+                <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: errorType === 'PERMISSION_DENIED' ? '#fca5a5' : '#fef3c7' }}>
+                  {errorType === 'PERMISSION_DENIED' ? 'Camera Permission Denied' : 'Camera Unavailable'}
                 </h4>
                 <p style={{ margin: 0, fontSize: '12px', color: '#cbd5e1', lineHeight: 1.4 }}>
-                  {cameraError || 'Could not access a video capture device.'}
+                  {cameraError || 'Could not access camera video stream.'}
                 </p>
               </div>
               <button
@@ -503,7 +631,7 @@ export default function CameraViewfinder({
       )}
 
       {/* 3. Real ONNX Detection Bounding Box Overlay */}
-      {detectedBox && cameraState === 'CAMERA_READY' && (
+      {detectedBox && lifecycleState === 'RUNNING' && (
         <div style={{
           position: 'absolute',
           top: detectedBox.y1 != null ? `${(detectedBox.y1 * 100).toFixed(1)}%` : '35%',
@@ -535,20 +663,21 @@ export default function CameraViewfinder({
         </div>
       )}
 
-      {/* 4. Top Left HUD Badge */}
+      {/* 4. Top Left HUD Badge & Prominent Stop Camera Control */}
       <div style={{
         position: 'absolute',
         top: '12px',
         left: '12px',
         zIndex: 50,
         display: 'flex',
-        flexDirection: 'column',
-        gap: '4px'
+        alignItems: 'center',
+        gap: '8px'
       }}>
+        {/* Status Pill */}
         <div style={{
-          background: isJourneyActive ? 'rgba(239, 68, 68, 0.2)' : (cameraState === 'CAMERA_READY' ? 'rgba(0, 245, 160, 0.15)' : 'rgba(148, 163, 184, 0.15)'),
-          border: `1px solid ${isJourneyActive ? 'rgba(239, 68, 68, 0.5)' : (cameraState === 'CAMERA_READY' ? 'rgba(0, 245, 160, 0.35)' : 'rgba(148, 163, 184, 0.25)')}`,
-          color: isJourneyActive ? '#fca5a5' : (cameraState === 'CAMERA_READY' ? '#00f5a0' : '#cbd5e1'),
+          background: isJourneyActive ? 'rgba(239, 68, 68, 0.25)' : (lifecycleState === 'RUNNING' ? 'rgba(0, 245, 160, 0.18)' : 'rgba(148, 163, 184, 0.15)'),
+          border: `1px solid ${isJourneyActive ? 'rgba(239, 68, 68, 0.6)' : (lifecycleState === 'RUNNING' ? 'rgba(0, 245, 160, 0.4)' : 'rgba(148, 163, 184, 0.25)')}`,
+          color: isJourneyActive ? '#fca5a5' : (lifecycleState === 'RUNNING' ? '#00f5a0' : '#cbd5e1'),
           padding: '4px 10px',
           borderRadius: '6px',
           fontSize: '11px',
@@ -562,15 +691,41 @@ export default function CameraViewfinder({
             width: '7px',
             height: '7px',
             borderRadius: '50%',
-            backgroundColor: isJourneyActive ? '#ef4444' : (cameraState === 'CAMERA_READY' ? '#00f5a0' : '#64748b'),
-            boxShadow: isJourneyActive ? '0 0 8px #ef4444' : (cameraState === 'CAMERA_READY' ? '0 0 8px #00f5a0' : 'none')
+            backgroundColor: isJourneyActive ? '#ef4444' : (lifecycleState === 'RUNNING' ? '#00f5a0' : '#64748b'),
+            boxShadow: isJourneyActive ? '0 0 8px #ef4444' : (lifecycleState === 'RUNNING' ? '0 0 8px #00f5a0' : 'none')
           }} />
           <span>
-            {isJourneyActive
-              ? `REC • LIVE ROAD CAMERA (${frameCount} frames)`
-              : (cameraState === 'CAMERA_READY' ? 'LIVE CAMERA READY' : 'CAMERA STANDBY')}
+            {lifecycleState === 'RUNNING'
+              ? (isJourneyActive ? `REC • LIVE CAMERA (${frameCount} frames)` : 'LIVE CAMERA ACTIVE')
+              : (lifecycleState === 'REQUESTING_PERMISSION' ? 'REQUESTING ACCESS...' : 'CAMERA OFF')}
           </span>
         </div>
+
+        {/* PROMINENT STOP CAMERA BUTTON: Always visible while camera is active or starting */}
+        {lifecycleState === 'RUNNING' && (
+          <button
+            type="button"
+            onClick={stopCamera}
+            title="Stop Camera Stream"
+            style={{
+              background: 'rgba(239, 68, 68, 0.85)',
+              border: '1px solid #ef4444',
+              color: '#ffffff',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Square size={11} fill="white" /> Stop Camera
+          </button>
+        )}
       </div>
 
       {/* 5. Top Right HUD: Live GPS Speed & Heading */}
@@ -599,7 +754,7 @@ export default function CameraViewfinder({
         left: '12px',
         right: '12px',
         zIndex: 50,
-        background: 'rgba(5, 8, 16, 0.85)',
+        background: 'rgba(5, 8, 16, 0.88)',
         backdropFilter: 'blur(6px)',
         border: '1px solid var(--border-subtle)',
         padding: '5px 12px',
@@ -608,14 +763,16 @@ export default function CameraViewfinder({
         color: '#94a3b8',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center'
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '6px'
       }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#cbd5e1' }}>
           <Cpu size={13} color="#a855f7" />
-          <span>{lastInferenceStatus || (isJourneyActive ? 'ONNX inference active' : 'Live dashcam feed')}</span>
+          <span>{lastInferenceStatus || (isJourneyActive ? 'ONNX inference active' : 'Camera standby')}</span>
         </span>
         <span style={{ fontSize: '10px', color: '#64748b' }}>
-          {cameraState === 'CAMERA_READY' ? 'Rear Camera Active' : 'Sensor Off'}
+          {lifecycleState === 'RUNNING' ? 'Rear Camera Active' : 'Camera Hardware Stopped'}
         </span>
       </div>
     </div>

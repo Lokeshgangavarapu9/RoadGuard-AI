@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Shield,
   Menu,
@@ -9,21 +9,16 @@ import {
   Square,
   MapPin,
   AlertTriangle,
-  FileText,
-  Activity,
-  History,
   CheckCircle2,
   RefreshCw,
-  Info,
-  Radio,
-  Sliders,
-  HelpCircle,
-  Pause,
-  Video,
-  AlertCircle
+  Camera,
+  Activity,
+  AlertCircle,
+  FileText
 } from 'lucide-react';
 import MapViewer from './components/MapViewer';
 import CameraViewfinder from './components/CameraViewfinder';
+import DiagnosticPanel from './components/DiagnosticPanel';
 import GrievanceModal from './components/GrievanceModal';
 import NavigationDrawer from './components/NavigationDrawer';
 import IssuesView from './components/IssuesView';
@@ -43,19 +38,7 @@ import {
   wakeUpBackend,
   getUserProfile
 } from './api';
-
-// Geodesic Haversine distance calculation in meters
-function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
-  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
-  const R = 6371000; // Earth radius in meters
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+import { isValidCoordinate, haversineDistanceMeters } from './utils/geoUtils';
 
 export default function App() {
   // Navigation & View State
@@ -196,90 +179,95 @@ export default function App() {
   const lastRecordedGpsRef = React.useRef(null);
   const distanceMetersRef = React.useRef(0);
 
-  // 2. Geolocation Watcher: Continuous high-accuracy device location tracking
-  useEffect(() => {
+  const watcherIdRef = useRef(null);
+
+  // 2. Central Geolocation Watcher Lifecycle: Continuous high-accuracy device tracking
+  const startGpsWatcher = useCallback(() => {
     if (!navigator.geolocation) {
       setGpsPermissionState('unavailable');
       setGpsErrorMessage('Browser Geolocation is not supported by this device or browser.');
       return;
     }
 
-    setGpsPermissionState('prompt');
-    const watcherId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setGpsPermissionState('granted');
-        setGpsErrorMessage(null);
-        const pt = {
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          speed: pos.coords.speed != null ? pos.coords.speed : null,
-          heading: pos.coords.heading != null ? pos.coords.heading : null,
-          accuracy: pos.coords.accuracy || 10.0,
-          timestamp: pos.timestamp
-        };
-        setCurrentLocation(pt);
-      },
-      (err) => {
-        console.warn('Device geolocation watcher notification:', err.code, err.message);
-        if (err.code === 1) {
-          setGpsPermissionState('denied');
-          setGpsErrorMessage('Location permission denied. Please allow GPS access in browser site settings.');
-        } else if (err.code === 2) {
-          setGpsPermissionState('unavailable');
-          setGpsErrorMessage('GPS position unavailable. Please ensure location services are enabled.');
-        } else if (err.code === 3) {
-          setGpsErrorMessage('GPS satellite lock timed out. Searching for satellite signal...');
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 5000
+    // Always clear any active watcher before creating a new one to prevent duplicate watchers
+    if (watcherIdRef.current != null) {
+      try {
+        navigator.geolocation.clearWatch(watcherIdRef.current);
+      } catch (e) {
+        console.warn('clearWatch warning:', e);
       }
-    );
-
-    return () => {
-      navigator.geolocation.clearWatch(watcherId);
-    };
-  }, []);
-
-  // Geolocation retry action handler (non-blocking)
-  const handleRetryGps = React.useCallback(() => {
-    setGpsErrorMessage(null);
-    if (!navigator.geolocation) {
-      setGpsPermissionState('unavailable');
-      setGpsErrorMessage('Browser Geolocation is not supported by this device.');
-      return;
+      watcherIdRef.current = null;
     }
+
     setGpsPermissionState('prompt');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGpsPermissionState('granted');
-        setGpsErrorMessage(null);
-        const pt = {
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          speed: pos.coords.speed != null ? pos.coords.speed : null,
-          heading: pos.coords.heading != null ? pos.coords.heading : null,
-          accuracy: pos.coords.accuracy || 10.0,
-          timestamp: pos.timestamp
-        };
-        setCurrentLocation(pt);
-      },
-      (err) => {
-        if (err.code === 1) {
-          setGpsPermissionState('denied');
-          setGpsErrorMessage('Location permission denied. Please allow GPS access in browser site settings.');
-        } else if (err.code === 2) {
-          setGpsPermissionState('unavailable');
-          setGpsErrorMessage('GPS position unavailable. Please ensure device location is turned on.');
-        } else if (err.code === 3) {
-          setGpsErrorMessage('GPS lock timed out. Please try moving outdoors with a clearer view of the sky.');
+    setGpsErrorMessage(null);
+
+    try {
+      const wId = navigator.geolocation.watchPosition(
+        (pos) => {
+          if (!pos || !pos.coords) return;
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          if (!isValidCoordinate(lat, lon)) {
+            console.warn('Ignored non-finite or out-of-bounds coordinate:', lat, lon);
+            return;
+          }
+
+          setGpsPermissionState('granted');
+          setGpsErrorMessage(null);
+          const pt = {
+            lat,
+            lon,
+            speed: pos.coords.speed != null && Number.isFinite(pos.coords.speed) ? pos.coords.speed : null,
+            heading: pos.coords.heading != null && Number.isFinite(pos.coords.heading) ? pos.coords.heading : null,
+            accuracy: pos.coords.accuracy != null && Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : 10.0,
+            timestamp: pos.timestamp || Date.now()
+          };
+          setCurrentLocation(pt);
+        },
+        (err) => {
+          console.warn('Device geolocation watcher notification:', err.code, err.message);
+          if (err.code === 1) {
+            setGpsPermissionState('denied');
+            setGpsErrorMessage('Location permission denied. Please allow GPS access in browser site settings.');
+          } else if (err.code === 2) {
+            setGpsPermissionState('unavailable');
+            setGpsErrorMessage('GPS position unavailable. Please ensure location services are enabled on device.');
+          } else if (err.code === 3) {
+            // Satellite lock timeout: non-blocking notice without clearing last valid position
+            setGpsErrorMessage('Searching for GPS satellite lock (outdoors with clear sky view recommended)...');
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 30000,
+          maximumAge: 5000
         }
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+      );
+      watcherIdRef.current = wId;
+    } catch (watchErr) {
+      console.warn('Failed to register geolocation watchPosition:', watchErr);
+      setGpsErrorMessage('Failed to initialize geolocation watcher: ' + watchErr.message);
+    }
   }, []);
+
+  // Initialize GPS watcher on mount and teardown cleanly on unmount
+  useEffect(() => {
+    startGpsWatcher();
+    return () => {
+      if (watcherIdRef.current != null) {
+        try {
+          navigator.geolocation.clearWatch(watcherIdRef.current);
+        } catch (e) {}
+        watcherIdRef.current = null;
+      }
+    };
+  }, [startGpsWatcher]);
+
+  // Geolocation retry action handler: safely restarts single watcher instance
+  const handleRetryGps = useCallback(() => {
+    startGpsWatcher();
+  }, [startGpsWatcher]);
 
   // 3. Elapsed time counter for active journey
   useEffect(() => {
@@ -349,25 +337,19 @@ export default function App() {
       return;
     }
 
-    // Prerequisite 2: Camera ready
-    if (cameraState !== 'CAMERA_READY') {
-      setStatusMessage('Cannot start: Camera feed is required. Please click "Start Camera" in the viewfinder.');
-      return;
-    }
-
-    // Prerequisite 3: Location permission
+    // Prerequisite 2: Location permission
     if (gpsPermissionState === 'denied') {
       setStatusMessage('Cannot start: Location permission is denied. Please allow GPS access in browser site settings.');
       return;
     }
 
-    // Prerequisite 4: Genuine GPS fix
+    // Prerequisite 3: Genuine GPS fix
     if (!currentLocation || currentLocation.lat == null) {
       setStatusMessage('Cannot start: Waiting for device GPS satellite fix. Please ensure device location is enabled.');
       return;
     }
 
-    // Prerequisite 5: Safety accuracy threshold (e.g. 25m)
+    // Prerequisite 4: Safety accuracy threshold (e.g. 25m)
     if (currentLocation.accuracy > settings.maxGpsAccuracy) {
       setStatusMessage(`Cannot start: GPS accuracy (±${currentLocation.accuracy.toFixed(0)}m) is poorer than safety threshold (±${settings.maxGpsAccuracy}m). Waiting for satellite lock...`);
       return;
@@ -377,6 +359,7 @@ export default function App() {
     try {
       setStatusMessage('Initiating live road-monitoring journey...');
       const startPt = { ...currentLocation };
+      const hasCam = cameraState === 'CAMERA_READY';
 
       const journey = await createJourney({
         vehicleType,
@@ -386,7 +369,7 @@ export default function App() {
         startLongitude: startPt.lon,
         startAddress: 'Live GPS Location',
         demoMode: false,
-        demoSource: 'Live Mobile Dashcam'
+        demoSource: hasCam ? 'Live Mobile Dashcam' : 'GPS Route Tracker'
       });
 
       lastRecordedGpsRef.current = startPt;
@@ -397,12 +380,32 @@ export default function App() {
       setGpsPath([startPt]);
       setRecordingStatus('RECORDING');
       setCompletedJourneyBanner(null);
-      setStatusMessage(`Drive Mode Active: Journey #${journey.id}. Live Camera & ONNX AI running.`);
+
+      setStatusMessage(
+        hasCam
+          ? `Drive Mode Active: Journey #${journey.id}. Live Camera & ONNX AI running.`
+          : `Drive Mode Active: Journey #${journey.id}. GPS Route Tracking active (Camera is stopped).`
+      );
     } catch (err) {
       console.error('Failed to start journey:', err);
       setStatusMessage('Failed to start journey: ' + err.message);
     } finally {
       isStartingJourneyRef.current = false;
+    }
+  }
+
+  // Quick / Emergency camera start or stop toggle
+  function handleToggleCamera() {
+    if (cameraState === 'CAMERA_READY') {
+      setCameraState('PERMISSION_REQUIRED');
+      if (activeJourney) {
+        setStatusMessage(`Drive Mode active: Journey #${activeJourney.id} — Camera stopped (GPS tracking active).`);
+      }
+    } else {
+      setCameraState('REQUESTING_PERMISSION');
+      if (activeJourney) {
+        setStatusMessage(`Drive Mode active: Journey #${activeJourney.id} — Starting live dashcam feed...`);
+      }
     }
   }
 
@@ -785,126 +788,18 @@ export default function App() {
               </div>
             )}
 
-            {/* Subsystem Diagnostics Strip (Stage 1: Real separate status per component) */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-              gap: '8px'
-            }}>
-              {/* 1. Backend */}
-              <div className="glass-panel" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px' }}>
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: health?.status === 'UP' ? '#00f5a0' : '#ef4444',
-                  boxShadow: health?.status === 'UP' ? '0 0 6px #00f5a0' : 'none'
-                }} />
-                <div>
-                  <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>BACKEND</div>
-                  <div style={{ fontSize: '11px', color: '#f8fafc', fontWeight: 600 }}>{health?.status === 'UP' ? 'Online' : 'Offline'}</div>
-                </div>
-              </div>
-
-              {/* 2. Database */}
-              <div className="glass-panel" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px' }}>
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: health?.database ? '#00f5a0' : '#f59e0b',
-                  boxShadow: health?.database ? '0 0 6px #00f5a0' : 'none'
-                }} />
-                <div>
-                  <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>DATABASE</div>
-                  <div style={{ fontSize: '11px', color: '#f8fafc', fontWeight: 600 }}>{health?.database || 'PostgreSQL'}</div>
-                </div>
-              </div>
-
-              {/* 3. AI Model */}
-              <div className="glass-panel" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px' }}>
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: health?.modelStatus === 'LOADED' ? '#00f5a0' : '#ef4444',
-                  boxShadow: health?.modelStatus === 'LOADED' ? '0 0 6px #00f5a0' : 'none'
-                }} />
-                <div>
-                  <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>AI MODEL</div>
-                  <div style={{ fontSize: '11px', color: '#f8fafc', fontWeight: 600 }}>{health?.modelStatus === 'LOADED' ? 'YOLO11s ONNX' : 'Unavailable'}</div>
-                </div>
-              </div>
-
-              {/* 4. GPS Sensor */}
-              <div className="glass-panel" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px' }}>
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: gpsPermissionState === 'denied'
-                    ? '#ef4444'
-                    : (!currentLocation
-                        ? '#f59e0b'
-                        : (currentLocation.accuracy <= settings.maxGpsAccuracy ? '#00f5a0' : '#f59e0b')),
-                  boxShadow: currentLocation && currentLocation.accuracy <= settings.maxGpsAccuracy ? '0 0 6px #00f5a0' : 'none'
-                }} />
-                <div>
-                  <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>GPS SENSOR</div>
-                  <div style={{ fontSize: '11px', color: '#f8fafc', fontWeight: 600 }}>
-                    {gpsPermissionState === 'denied'
-                      ? 'Permission Denied'
-                      : (!currentLocation
-                          ? 'Waiting Fix...'
-                          : (currentLocation.accuracy <= settings.maxGpsAccuracy
-                              ? `Ready (±${currentLocation.accuracy.toFixed(0)}m)`
-                              : `Weak (±${currentLocation.accuracy.toFixed(0)}m)`))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. Camera Sensor */}
-              <div className="glass-panel" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px' }}>
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: recordingStatus !== 'STOPPED'
-                    ? '#00f5a0'
-                    : (cameraState === 'CAMERA_READY'
-                        ? '#00f5a0'
-                        : (cameraState === 'REQUESTING_PERMISSION' ? '#f59e0b' : '#94a3b8')),
-                  boxShadow: recordingStatus !== 'STOPPED' || cameraState === 'CAMERA_READY' ? '0 0 6px #00f5a0' : 'none'
-                }} />
-                <div>
-                  <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>CAMERA</div>
-                  <div style={{ fontSize: '11px', color: '#f8fafc', fontWeight: 600 }}>
-                    {recordingStatus !== 'STOPPED'
-                      ? 'Streaming (REC)'
-                      : (cameraState === 'CAMERA_READY'
-                          ? 'Camera Ready'
-                          : (cameraState === 'REQUESTING_PERMISSION'
-                              ? 'Requesting...'
-                              : (cameraState === 'PERMISSION_DENIED' ? 'Denied' : 'Standby')))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 6. Maps Provider */}
-              <div className="glass-panel" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px' }}>
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: '#00f5a0',
-                  boxShadow: '0 0 6px #00f5a0'
-                }} />
-                <div>
-                  <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>MAPS ENGINE</div>
-                  <div style={{ fontSize: '11px', color: '#f8fafc', fontWeight: 600 }}>Leaflet + OSM</div>
-                </div>
-              </div>
-            </div>
+            {/* Integrated Subsystem Diagnostics & Live Telemetry Panel */}
+            <DiagnosticPanel
+              cameraState={cameraState}
+              isJourneyActive={activeJourney != null}
+              activeJourneyId={activeJourney?.id}
+              currentLocation={currentLocation}
+              gpsPermissionState={gpsPermissionState}
+              gpsErrorMessage={gpsErrorMessage}
+              health={health}
+              distanceMeters={distanceMeters}
+              elapsedSeconds={elapsedSeconds}
+            />
 
             {/* Field-Test Driver Safety Advisory */}
             <div style={{
@@ -998,13 +893,45 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Action Button: Start / Stop Drive Mode */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* Action Buttons: Camera toggle & Start/Stop Drive Mode */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
                   {activeJourney
                     ? `Journey #${activeJourney.id} • ${formatDistance(distanceMeters)} • ${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')} • Acc: ±${(currentLocation?.accuracy || 0).toFixed(0)}m`
                     : statusMessage}
                 </span>
+
+                {/* Always Accessible Camera Toggle Control */}
+                <button
+                  type="button"
+                  onClick={handleToggleCamera}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: cameraState === 'CAMERA_READY' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(0, 245, 160, 0.15)',
+                    border: `1px solid ${cameraState === 'CAMERA_READY' ? '#ef4444' : 'rgba(0, 245, 160, 0.4)'}`,
+                    color: cameraState === 'CAMERA_READY' ? '#fca5a5' : '#00f5a0',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title={cameraState === 'CAMERA_READY' ? 'Stop Camera Stream' : 'Start Camera Stream'}
+                >
+                  {cameraState === 'CAMERA_READY' ? (
+                    <>
+                      <Square size={12} fill="#ef4444" /> Stop Camera
+                    </>
+                  ) : (
+                    <>
+                      <Camera size={14} /> Start Camera
+                    </>
+                  )}
+                </button>
+
                 {activeJourney ? (
                   <button
                     onClick={handleStopJourney}
