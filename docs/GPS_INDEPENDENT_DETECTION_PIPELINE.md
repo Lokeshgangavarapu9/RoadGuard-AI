@@ -5,6 +5,7 @@
 RoadGuard AI decouples road defect vision from device geolocation telemetry. In previous versions, missing or uncalibrated GPS could stall camera frame capture, pause inference, or inject misleading fallback coordinates.
 
 In this architecture:
+
 1. **GPS Never Blocks AI Detection**: Frame capture, ONNX YOLO11s defect inference, incident creation, and evidence storage run completely uninterrupted regardless of GPS state.
 2. **Explicit GPS Lifecycle Control**: GPS is `OFF` by default upon page load and requires explicit citizen activation. It never auto-starts or requests browser permissions unprompted.
 3. **No Synthetic / Fallback Coordinates**: When GPS is absent, coarse (>50m), or stale (>30s), coordinates are strictly stored as `null`. Fabricated fallbacks (such as Vijayawada coordinates) have been eliminated.
@@ -15,7 +16,7 @@ In this architecture:
 
 ## 2. Core Subsystem Architecture
 
-```
+```text
 +-----------------------------------------------------------------------------------+
 |                              CITIZEN DASHBOARD (React)                           |
 +-----------------------------------------------------------------------------------+
@@ -86,7 +87,7 @@ The GPS tracking system transitions across 5 clearly delineated states:
 | **`GPS CONNECTING`** | `GPS: CONNECTING` | Sky Blue `#38bdf8` | User clicked `GPS: OFF` button | Browser permission requested; single watcher started (`watchPosition`); high accuracy enabled. |
 | **`GPS ACTIVE`** | `GPS: ACTIVE` | Neon Emerald `#00f5a0` | Satellite lock acquired with accuracy $\le 50\text{ m}$ | Coordinates attached to captured frames; vehicle position rendered on map; accuracy circle displayed. |
 | **`GPS ACTIVE (STALE)`** | `GPS: ACTIVE (STALE)` | Amber `#f59e0b` | Fix older than 20 seconds | Map marker indicates stale status; accuracy circle warning; frames tagged with `null` if $>30\text{ s}$. |
-| **`GPS ERROR` / `DENIED`**| `GPS: ERROR` / `DENIED` | Crimson `#ef4444` | Permission denied or hardware timeout | Notification displayed; camera and detection continue unaffected in manual location mode. |
+| **`GPS ERROR` / `DENIED`** | `GPS: ERROR` / `DENIED` | Crimson `#ef4444` | Permission denied or hardware timeout | Notification displayed; camera and detection continue unaffected in manual location mode. |
 
 ---
 
@@ -110,6 +111,7 @@ To protect against faulty GPS multipath, urban canyon errors, and misleading loc
 When road defects are detected while GPS is offline, RoadGuard AI guarantees complete civic traceability:
 
 ### Backend Schema (`road_issues` table)
+
 - `latitude`: `DOUBLE PRECISION NULL` (nullable per Flyway migration `V7`)
 - `longitude`: `DOUBLE PRECISION NULL` (nullable per Flyway migration `V7`)
 - `location_source`: `VARCHAR(40)` (`GPS_TELEMETRY`, `MANUAL_LOCATION_REQUIRED`, `MANUAL_ENTRY`)
@@ -120,7 +122,9 @@ When road defects are detected while GPS is offline, RoadGuard AI guarantees com
 - `pincode`: `VARCHAR(10)`
 
 ### REST API Endpoints
+
 - **Update Defect Location**: `PUT /api/v1/issues/{id}/location`
+
   ```json
   {
     "roadName": "NH-16 Benz Circle Flyover",
@@ -132,6 +136,7 @@ When road defects are detected while GPS is offline, RoadGuard AI guarantees com
     "longitude": 80.6480
   }
   ```
+
 - **Response**: Returns updated issue with `locationSource: "MANUAL_ENTRY"` and recalculated authority jurisdiction (e.g. `NHAI` for national highways, `AP_CDMA` for municipal corridors).
 
 ---

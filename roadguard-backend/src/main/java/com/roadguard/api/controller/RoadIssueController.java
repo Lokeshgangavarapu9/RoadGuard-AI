@@ -8,6 +8,7 @@ import com.roadguard.api.entity.RoadIssue;
 import com.roadguard.api.repository.EvidenceFrameRepository;
 import com.roadguard.api.repository.InvestigationResultRepository;
 import com.roadguard.api.repository.RoadIssueRepository;
+import com.roadguard.api.service.AuthorityRoutingService;
 import com.roadguard.api.service.InvestigationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,14 +26,14 @@ public class RoadIssueController {
     private final InvestigationResultRepository investigationRepository;
     private final EvidenceFrameRepository frameRepository;
     private final InvestigationService investigationService;
-    private final com.roadguard.api.service.AuthorityRoutingService authorityRoutingService;
+    private final AuthorityRoutingService authorityRoutingService;
 
     public RoadIssueController(
         RoadIssueRepository issueRepository,
         InvestigationResultRepository investigationRepository,
         EvidenceFrameRepository frameRepository,
         InvestigationService investigationService,
-        com.roadguard.api.service.AuthorityRoutingService authorityRoutingService
+        AuthorityRoutingService authorityRoutingService
     ) {
         this.issueRepository = issueRepository;
         this.investigationRepository = investigationRepository;
