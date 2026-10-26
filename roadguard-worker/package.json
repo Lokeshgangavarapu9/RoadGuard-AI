@@ -1,0 +1,19 @@
+{
+  "name": "roadguard-worker",
+  "version": "1.0.0",
+  "description": "RoadGuard AI - Local Government Portal Automation Worker with Playwright & Human-in-the-Loop",
+  "main": "src/worker.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/worker.js",
+    "mock-portal": "node src/mock-portal/server.js",
+    "test": "node --test test/mock_portal_e2e.test.js"
+  },
+  "dependencies": {
+    "playwright": "^1.50.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

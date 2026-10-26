@@ -1,5 +1,6 @@
 package com.roadguard.api.controller;
 
+import com.roadguard.api.dto.ProfileReadinessSummaryDto;
 import com.roadguard.api.entity.ConnectedPortal;
 import com.roadguard.api.entity.UserProfile;
 import com.roadguard.api.service.UserProfileService;
@@ -26,6 +27,11 @@ public class UserProfileController {
     @PutMapping
     public ResponseEntity<UserProfile> updateProfile(@RequestBody UserProfile request) {
         return ResponseEntity.ok(profileService.updateProfile(request));
+    }
+
+    @GetMapping("/readiness")
+    public ResponseEntity<ProfileReadinessSummaryDto> getProfileReadiness() {
+        return ResponseEntity.ok(profileService.getProfileReadiness());
     }
 
     @GetMapping("/connected-services")

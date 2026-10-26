@@ -19,10 +19,16 @@ public class UserProfileService {
 
     private final UserProfileRepository profileRepository;
     private final ConnectedPortalRepository portalRepository;
+    private final PortalRequirementsEngine requirementsEngine;
 
-    public UserProfileService(UserProfileRepository profileRepository, ConnectedPortalRepository portalRepository) {
+    public UserProfileService(
+        UserProfileRepository profileRepository,
+        ConnectedPortalRepository portalRepository,
+        PortalRequirementsEngine requirementsEngine
+    ) {
         this.profileRepository = profileRepository;
         this.portalRepository = portalRepository;
+        this.requirementsEngine = requirementsEngine;
     }
 
     @Transactional
@@ -46,10 +52,22 @@ public class UserProfileService {
             empty.setFullName("");
             empty.setEmail("");
             empty.setPhone("");
+            empty.setPreferredLanguage("English");
             empty.setAddress("");
+            empty.setState("Andhra Pradesh");
+            empty.setDistrict("");
+            empty.setCityOrMunicipality("");
+            empty.setUlbName("");
+            empty.setWardNumber("");
+            empty.setLocality("");
+            empty.setPinCode("");
             empty.setPrimaryVrn("");
             empty.setVehicleType("CAR");
             empty.setAdditionalVehicles("");
+            empty.setPreferredNotificationChannel("SMS");
+            empty.setConsentDeviceLocation(true);
+            empty.setConsentInspectionPhotos(true);
+            empty.setCommunicationPreferences("");
             return empty;
         }
         return profile;
@@ -81,14 +99,40 @@ public class UserProfileService {
         existing.setFullName(request.getFullName().trim());
         existing.setEmail(request.getEmail().trim());
         existing.setPhone(effectivePhone.trim());
+        if (request.getPreferredLanguage() != null) existing.setPreferredLanguage(request.getPreferredLanguage().trim());
+
+        // Address & Jurisdiction
         existing.setAddress(request.getAddress() != null ? request.getAddress().trim() : null);
+        existing.setState(request.getState() != null ? request.getState().trim() : "Andhra Pradesh");
+        existing.setDistrict(request.getDistrict() != null ? request.getDistrict().trim() : null);
+        existing.setCityOrMunicipality(request.getCityOrMunicipality() != null ? request.getCityOrMunicipality().trim() : null);
+        existing.setUlbName(request.getUlbName() != null ? request.getUlbName().trim() : null);
+        existing.setWardNumber(request.getWardNumber() != null ? request.getWardNumber().trim() : null);
+        existing.setLocality(request.getLocality() != null ? request.getLocality().trim() : null);
+        existing.setPinCode(request.getPinCode() != null ? request.getPinCode().trim() : null);
+
+        // Vehicle info
         existing.setPrimaryVrn(request.getPrimaryVrn() != null ? request.getPrimaryVrn().trim() : null);
         existing.setVehicleType(request.getVehicleType() != null ? request.getVehicleType().trim() : "CAR");
         existing.setAdditionalVehicles(request.getAdditionalVehicles() != null ? request.getAdditionalVehicles().trim() : null);
+
+        // Preferences & Consent
+        if (request.getPreferredNotificationChannel() != null) existing.setPreferredNotificationChannel(request.getPreferredNotificationChannel().trim());
+        if (request.getConsentDeviceLocation() != null) existing.setConsentDeviceLocation(request.getConsentDeviceLocation());
+        if (request.getConsentInspectionPhotos() != null) existing.setConsentInspectionPhotos(request.getConsentInspectionPhotos());
+        if (request.getCommunicationPreferences() != null) existing.setCommunicationPreferences(request.getCommunicationPreferences().trim());
+
         existing.setUpdatedAt(Instant.now());
 
-        log.info("Persisted genuine citizen profile (VRN: {})", existing.getPrimaryVrnNormalized());
+        log.info("Persisted genuine citizen profile for '{}' (State: {}, District: {})",
+            existing.getFullName(), existing.getState(), existing.getDistrict());
         return profileRepository.save(existing);
+    }
+
+    @Transactional(readOnly = true)
+    public com.roadguard.api.dto.ProfileReadinessSummaryDto getProfileReadiness() {
+        UserProfile profile = getProfile();
+        return requirementsEngine.calculateProfileSummary(profile);
     }
 
     @Transactional(readOnly = true)

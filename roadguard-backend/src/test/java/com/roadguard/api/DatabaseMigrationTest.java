@@ -182,4 +182,57 @@ public class DatabaseMigrationTest {
         // Verify it was purged from the database
         assertEquals(0, profileRepository.count(), "Legacy mock record must be deleted from DB");
     }
+
+    @Test
+    @Order(8)
+    void testJurisdictionAndPreferencesPersistence() {
+        UserProfile prof = new UserProfile();
+        prof.setFullName("Sita Devi");
+        prof.setEmail("sita.devi@example.com");
+        prof.setPhone("9848022338");
+        prof.setPreferredLanguage("Telugu");
+        prof.setState("Andhra Pradesh");
+        prof.setDistrict("Krishna");
+        prof.setCityOrMunicipality("Vijayawada");
+        prof.setUlbName("Vijayawada Municipal Corporation");
+        prof.setWardNumber("Ward 24");
+        prof.setLocality("Governorpet");
+        prof.setPinCode("520002");
+        prof.setPreferredNotificationChannel("SMS");
+        prof.setConsentDeviceLocation(true);
+        prof.setConsentInspectionPhotos(true);
+        prof.setCommunicationPreferences("Call after work hours");
+
+        UserProfile saved = profileService.updateProfile(prof);
+        assertNotNull(saved.getId());
+        assertEquals("Vijayawada Municipal Corporation", saved.getUlbName());
+        assertEquals("Ward 24", saved.getWardNumber());
+        assertEquals("Telugu", saved.getPreferredLanguage());
+        assertTrue(saved.getConsentInspectionPhotos());
+    }
+
+    @Test
+    @Order(9)
+    void testPortalReadinessEngine() {
+        var readiness = profileService.getProfileReadiness();
+        assertNotNull(readiness);
+        assertTrue(readiness.personalInfoCompletenessPercent() > 0);
+        assertTrue(readiness.addressJurisdictionCompletenessPercent() > 0);
+        assertNotNull(readiness.portalReadinessList());
+        assertEquals(3, readiness.portalReadinessList().size());
+
+        // Verify Rajmargyatra readiness
+        var rajmarg = readiness.portalReadinessList().stream()
+            .filter(p -> "RAJMARGYATRA_NHAI".equals(p.portalId()))
+            .findFirst()
+            .orElseThrow();
+        assertTrue(rajmarg.isReadyToPrepare(), "Profile with name & phone must be ready to prepare NHAI complaint");
+
+        // Verify AP CDMA readiness
+        var cdma = readiness.portalReadinessList().stream()
+            .filter(p -> "AP_CDMA".equals(p.portalId()))
+            .findFirst()
+            .orElseThrow();
+        assertTrue(cdma.isReadyToPrepare(), "Profile with municipality must be ready to prepare CDMA complaint");
+    }
 }

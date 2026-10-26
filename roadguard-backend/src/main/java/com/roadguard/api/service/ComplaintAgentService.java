@@ -116,13 +116,27 @@ public class ComplaintAgentService {
             complaint.setStatus(Complaint.ComplaintStatus.AWAITING_REVIEW);
             issue.setStatus(RoadIssue.IssueStatus.INVESTIGATING);
         } else {
-            complaint.setStatus(Complaint.ComplaintStatus.COMPLAINT_PREPARED);
+            complaint.setStatus(Complaint.ComplaintStatus.AWAITING_CITIZEN_APPROVAL);
             issue.setStatus(RoadIssue.IssueStatus.COMPLAINT_DRAFTED);
         }
 
         roadIssueRepository.save(issue);
         Complaint saved = complaintRepository.save(complaint);
         log.info("Prepared complaint #{} in state: {}", saved.getId(), saved.getStatus());
+        return saved;
+    }
+
+    /**
+     * Citizen review approval: Transitions complaint to READY_TO_SUBMIT.
+     */
+    @Transactional
+    public Complaint approveComplaint(Long complaintId) {
+        Complaint complaint = complaintRepository.findById(complaintId)
+            .orElseThrow(() -> new IllegalArgumentException("Complaint not found: " + complaintId));
+        complaint.setStatus(Complaint.ComplaintStatus.READY_TO_SUBMIT);
+        complaint.setApprovedAt(Instant.now());
+        Complaint saved = complaintRepository.save(complaint);
+        log.info("Citizen approved complaint #{}. State transitioned to: {}", saved.getId(), saved.getStatus());
         return saved;
     }
 

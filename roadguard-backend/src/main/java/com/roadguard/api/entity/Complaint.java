@@ -9,17 +9,27 @@ public class Complaint {
 
     public enum ComplaintStatus {
         DRAFT,
+        EVIDENCE_READY,
+        AWAITING_CITIZEN_APPROVAL,
+        READY_TO_SUBMIT,
+        SUBMITTING,
+        AWAITING_CITIZEN,
+        SUBMISSION_UNVERIFIED,
+        SUBMITTED,
+        TRACKING,
+        RESOLVED,
+        FOLLOW_UP_REQUIRED,
+        FAILED,
+        // Legacy statuses retained for backwards compatibility
         AWAITING_REVIEW,
         VERIFIED,
         COMPLAINT_PREPARED,
         AWAITING_USER_ACTION,
         SUBMISSION_IN_PROGRESS,
-        SUBMITTED,
         SUBMISSION_FAILED,
         SUBMISSION_UNKNOWN,
         APPROVED,
         SIMULATED,
-        FAILED,
         WITHDRAWN
     }
 

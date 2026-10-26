@@ -906,6 +906,39 @@ export default function App() {
               </div>
             </div>
 
+            {/* Field-Test Driver Safety Advisory */}
+            <div style={{
+              background: 'rgba(30, 41, 59, 0.7)',
+              border: '1px solid rgba(148, 163, 184, 0.25)',
+              borderRadius: '8px',
+              padding: '8px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '10px',
+              fontSize: '11px',
+              color: '#94a3b8'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Shield size={14} color="#00f5a0" style={{ flexShrink: 0 }} />
+                <span>
+                  <strong style={{ color: '#f8fafc' }}>Road Safety Advisory:</strong> Mount phone securely on windshield/dash. Operate app only while parked or have a passenger/co-driver operate it. Never handle the screen while driving.
+                </span>
+              </div>
+              <span style={{
+                background: 'rgba(0, 245, 160, 0.1)',
+                color: '#00f5a0',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.04em'
+              }}>
+                PASSENGER / MOUNTED USE ONLY
+              </span>
+            </div>
+
             {/* Control Bar: Vehicle selection and start/stop drive mode */}
             <div className="glass-panel" style={{
               padding: '14px 18px',

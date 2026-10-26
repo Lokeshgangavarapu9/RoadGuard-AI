@@ -13,5 +13,6 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
     Optional<Complaint> findByIdempotencyKey(String idempotencyKey);
     List<Complaint> findByRoadIssueId(Long roadIssueId);
     List<Complaint> findByStatus(Complaint.ComplaintStatus status);
+    List<Complaint> findByStatusAndOfficialRefIdIsNotNullOrderBySubmittedAtDesc(Complaint.ComplaintStatus status);
     List<Complaint> findAllByOrderByCreatedAtDesc();
 }

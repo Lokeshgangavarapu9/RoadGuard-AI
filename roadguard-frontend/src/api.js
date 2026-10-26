@@ -294,3 +294,84 @@ export async function refreshPortalStatus(portalId) {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+// ── Government Portal Automation Worker APIs ──
+
+export async function getWorkerStatus() {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/automation/worker/status`, {}, 4000);
+    if (!res.ok) return { connected: false, activeWorkerCount: 0 };
+    return await res.json();
+  } catch {
+    return { connected: false, activeWorkerCount: 0 };
+  }
+}
+
+export async function approveComplaint(complaintId) {
+  const res = await fetchWithTimeout(`${API_BASE}/complaints/${complaintId}/approve`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function dispatchAutomationJob(complaintId, { mode = 'MOCK', portalId = 'MOCK_PORTAL' } = {}) {
+  const res = await fetchWithTimeout(
+    `${API_BASE}/automation/complaints/${complaintId}/dispatch?mode=${encodeURIComponent(mode)}&portalId=${encodeURIComponent(portalId)}`,
+    { method: 'POST' }
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getAutomationJob(complaintId) {
+  const res = await fetchWithTimeout(`${API_BASE}/automation/complaints/${complaintId}/job`);
+  if (res.status === 204) return null;
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getFilingAuditTrail(complaintId) {
+  const res = await fetchWithTimeout(`${API_BASE}/automation/complaints/${complaintId}/audit`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function supplyAutomationOtp(jobId, otpCode) {
+  const res = await fetchWithTimeout(`${API_BASE}/automation/jobs/${jobId}/otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ otpCode }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function confirmAutomationCaptcha(jobId) {
+  const res = await fetchWithTimeout(`${API_BASE}/automation/jobs/${jobId}/captcha-solved`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+/**
+ * Retrieves confirmed government complaints history.
+ * Excludes drafts, unapproved, failed, SUBMISSION_UNVERIFIED, and mock submissions.
+ */
+export async function getConfirmedComplaintsHistory() {
+  const res = await fetchWithTimeout(`${API_BASE}/complaints/confirmed-history`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+/**
+ * Retrieves the citizen profile readiness and portal requirements evaluation.
+ */
+export async function getProfileReadiness() {
+  const res = await fetchWithTimeout(`${API_BASE}/profile/readiness`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+
