@@ -21,11 +21,15 @@ import com.roadguard.api.entity.AutomationJob;
 import com.roadguard.api.entity.EvidenceFrame;
 import com.roadguard.api.repository.AutomationJobRepository;
 import com.roadguard.api.repository.EvidenceFrameRepository;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestController
 @RequestMapping("/api/v1/complaints")
@@ -201,7 +205,7 @@ public class ComplaintController {
         return ResponseEntity.ok(list);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:[0-9]+}")
     public ResponseEntity<ComplaintResponse> getComplaint(@PathVariable Long id) {
         Complaint c = complaintRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Complaint not found: " + id));
@@ -211,7 +215,7 @@ public class ComplaintController {
     /**
      * Citizen review approval: Transitions complaint to READY_TO_SUBMIT.
      */
-    @PostMapping("/{id}/approve")
+    @PostMapping("/{id:[0-9]+}/approve")
     public ResponseEntity<ComplaintResponse> approveComplaint(@PathVariable Long id) {
         Complaint approved = complaintAgentService.approveComplaint(id);
         return ResponseEntity.ok(ComplaintResponse.fromEntity(approved));
@@ -220,7 +224,7 @@ public class ComplaintController {
     /**
      * Step 1: Citizen-assisted official portal handoff packet.
      */
-    @PostMapping("/{id}/initiate-handoff")
+    @PostMapping("/{id:[0-9]+}/initiate-handoff")
     public ResponseEntity<ComplaintAgentService.PortalHandoffPacket> initiatePortalHandoff(@PathVariable Long id) {
         ComplaintAgentService.PortalHandoffPacket packet = complaintAgentService.initiatePortalHandoff(id);
         return ResponseEntity.ok(packet);
@@ -229,7 +233,7 @@ public class ComplaintController {
     /**
      * Step 2: Record verified official government grievance reference ID.
      */
-    @PostMapping("/{id}/record-receipt")
+    @PostMapping("/{id:[0-9]+}/record-receipt")
     public ResponseEntity<ComplaintAgentService.SubmissionConfirmation> recordOfficialReceipt(
         @PathVariable Long id,
         @Valid @RequestBody RecordReceiptRequest req
@@ -243,7 +247,7 @@ public class ComplaintController {
      * Backwards-compatible endpoint for legacy clients: Initiates truthful portal handoff
      * without generating fake reference IDs or mock receipts.
      */
-    @PostMapping("/{id}/simulate")
+    @PostMapping("/{id:[0-9]+}/simulate")
     public ResponseEntity<SimulateSubmissionResponse> simulateSubmission(@PathVariable Long id) {
         ComplaintAgentService.PortalHandoffPacket packet = complaintAgentService.initiatePortalHandoff(id);
         SimulateSubmissionResponse resp = new SimulateSubmissionResponse();
@@ -254,5 +258,25 @@ public class ComplaintController {
         resp.setWarning("Official portal handoff initiated. Please complete OTP login on " + packet.targetAuthorityName() + " and record the returned official reference ID.");
         resp.setReceiptText(packet.dossierText());
         return ResponseEntity.ok(resp);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("timestamp", Instant.now().toString());
+        error.put("status", HttpStatus.BAD_REQUEST.value());
+        error.put("error", "Bad Request");
+        error.put("message", "Invalid parameter: '" + ex.getName() + "'. Value '" + ex.getValue() + "' is not a valid number.");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("timestamp", Instant.now().toString());
+        error.put("status", HttpStatus.NOT_FOUND.value());
+        error.put("error", "Not Found");
+        error.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 }

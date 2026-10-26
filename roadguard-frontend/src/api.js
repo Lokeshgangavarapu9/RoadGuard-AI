@@ -3,7 +3,7 @@
 // 2. Production fallback: when running on Vercel or any remote non-localhost domain,
 //    default directly to the deployed Render backend so API requests never fail with 405s on static hosting.
 // 3. Localhost fallback: empty string (routes through Vite dev server proxy at /api/v1).
-const envBackendUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+const envBackendUrl = ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || '').trim().replace(/\/+$/, '');
 const isBrowser = typeof window !== 'undefined';
 const isLocalhost = isBrowser && (
   window.location.hostname === 'localhost' ||
@@ -366,12 +366,52 @@ export async function confirmAutomationCaptcha(jobId) {
 }
 
 /**
+ * Safely extracts a clean, human-readable error message from an HTTP error response.
+ * Strictly prevents leaking raw JSON strings or HTML payloads into UI error states.
+ */
+export async function parseErrorResponse(res, fallbackMessage = 'Server request failed') {
+  const status = res.status;
+  const statusText = res.statusText || 'Error';
+  let message = `${fallbackMessage} (HTTP ${status} ${statusText})`;
+
+  try {
+    const text = await res.text();
+    if (text && text.trim()) {
+      const trimmed = text.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed && typeof parsed === 'object') {
+            if (typeof parsed.message === 'string' && parsed.message.trim()) {
+              message = parsed.message.trim();
+            } else if (typeof parsed.error === 'string' && parsed.error.trim()) {
+              message = `${parsed.error} (HTTP ${status})`;
+            }
+          }
+        } catch {
+          // ignore parse error and use default
+        }
+      } else if (!trimmed.startsWith('<') && trimmed.length < 200) {
+        message = trimmed;
+      }
+    }
+  } catch {
+    // Keep default message
+  }
+
+  return message;
+}
+
+/**
  * Retrieves confirmed government complaints history.
  * Excludes drafts, unapproved, failed, SUBMISSION_UNVERIFIED, and mock submissions.
  */
 export async function getConfirmedComplaintsHistory() {
   const res = await fetchWithTimeout(`${API_BASE}/complaints/confirmed-history`);
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const errorMsg = await parseErrorResponse(res, 'Failed to fetch confirmed complaints from server');
+    throw new Error(errorMsg);
+  }
   return res.json();
 }
 
@@ -380,7 +420,10 @@ export async function getConfirmedComplaintsHistory() {
  */
 export async function getProfileReadiness() {
   const res = await fetchWithTimeout(`${API_BASE}/profile/readiness`);
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const errorMsg = await parseErrorResponse(res, 'Failed to fetch profile readiness evaluation');
+    throw new Error(errorMsg);
+  }
   return res.json();
 }
 

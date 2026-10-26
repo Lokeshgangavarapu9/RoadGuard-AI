@@ -51,7 +51,16 @@ export default function HistoryView({
       setComplaints(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load confirmed government complaints:', err);
-      setComplaintsError(err.message || 'Failed to fetch confirmed complaints from server.');
+      let rawMsg = err.message || 'Failed to fetch confirmed complaints from server.';
+      if (typeof rawMsg === 'string' && rawMsg.trim().startsWith('{') && rawMsg.trim().endsWith('}')) {
+        try {
+          const parsed = JSON.parse(rawMsg);
+          rawMsg = parsed.message || parsed.error || `Server error (${parsed.status || 400})`;
+        } catch {
+          // ignore parse error
+        }
+      }
+      setComplaintsError(rawMsg);
     } finally {
       setIsLoadingComplaints(false);
     }
@@ -314,9 +323,63 @@ export default function HistoryView({
               <p>Loading confirmed government complaint records...</p>
             </div>
           ) : complaintsError ? (
-            <div className="glass-panel" style={{ padding: '30px 20px', textAlign: 'center', color: '#ef4444' }}>
-              <AlertTriangle size={32} style={{ margin: '0 auto 10px' }} />
-              <p style={{ margin: 0 }}>{complaintsError}</p>
+            <div
+              className="glass-panel"
+              style={{
+                padding: '36px 20px',
+                textAlign: 'center',
+                backgroundColor: 'rgba(239, 68, 68, 0.06)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                borderRadius: '14px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '12px'
+              }}
+            >
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ef4444'
+                }}
+              >
+                <AlertTriangle size={24} />
+              </div>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+                Unable to Load Government Complaints
+              </h3>
+              <p style={{ fontSize: '13px', color: '#cbd5e1', maxWidth: '480px', margin: 0, lineHeight: 1.5 }}>
+                {complaintsError}
+              </p>
+              <button
+                type="button"
+                onClick={loadComplaintsHistory}
+                style={{
+                  marginTop: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  backgroundColor: '#38bdf8',
+                  color: '#0f172a',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.15s ease'
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#7dd3fc')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#38bdf8')}
+              >
+                <RefreshCw size={14} /> Retry
+              </button>
             </div>
           ) : complaints.length === 0 ? (
             <div className="glass-panel" style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8', borderRadius: '14px' }}>
