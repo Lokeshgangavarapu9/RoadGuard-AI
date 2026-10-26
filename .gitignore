@@ -55,4 +55,6 @@ roadguard-backend/models/*.onnx
 uploads/
 roadguard-backend/uploads/
 test-images/
+# Test screenshots (transient audit captures)
+roadguard-worker/screenshots/**/*.png
 
