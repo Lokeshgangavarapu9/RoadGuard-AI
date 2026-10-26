@@ -365,21 +365,16 @@ export default function CameraViewfinder({
         const speed = currentLocation?.speed;
         const timestamp = currentLocation?.timestamp;
 
-        // Verify coordinate validity and freshness
+        // Verify coordinate validity, freshness, and accuracy
         const hasValidCoords = isValidCoordinate(rawLat, rawLon);
         const isStale = isFixStale(timestamp, 30000); // 30-second stale limit
+        const isAccurate = accuracy != null && accuracy <= 50;
 
-        // 3-Tier GPS Policy:
-        // Tier 3 (> 50m): Pause automatic sampling to prevent false coordinate pinning
-        if (accuracy != null && accuracy > 50) {
-          setLastInferenceStatus(`GPS fix is coarse (±${Math.round(accuracy)}m > 50m limit) — automatic sampling paused until satellite lock improves.`);
-          inFlightInferenceRef.current = false;
-          return;
-        }
-
-        // Never assign false coordinates if GPS is missing or stale
-        const sanitizedLat = (hasValidCoords && !isStale) ? rawLat : null;
-        const sanitizedLon = (hasValidCoords && !isStale) ? rawLon : null;
+        // When GPS is OFF, missing, stale, or coarse (>50m):
+        // Never assign false or coarse coordinates. Use null so backend flags as MANUAL_LOCATION_REQUIRED.
+        // Camera operation and AI inference remain completely independent of GPS.
+        const sanitizedLat = (hasValidCoords && !isStale && isAccurate) ? rawLat : null;
+        const sanitizedLon = (hasValidCoords && !isStale && isAccurate) ? rawLon : null;
 
         // Upload genuine frame to backend ONNX pipeline with verified telemetry
         const resp = await uploadEvidenceFrame(journeyId, file, {

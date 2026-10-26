@@ -74,8 +74,8 @@ public class InferenceService {
         Long frameId;
         RoadIssue.DefectClass defectClass;
         float confidence;
-        double lat;
-        double lon;
+        Double lat;
+        Double lon;
         int frameSeq;
     }
 
@@ -226,8 +226,8 @@ public class InferenceService {
             frame.getId(), rawDetections.size(), confidenceThreshold);
 
         int seq = frame.getFrameSequence() != null ? frame.getFrameSequence() : 1;
-        double lat = frame.getLatitude() != null ? frame.getLatitude() : 16.5062;
-        double lon = frame.getLongitude() != null ? frame.getLongitude() : 80.6480;
+        Double lat = frame.getLatitude();
+        Double lon = frame.getLongitude();
 
         for (RawDetection det : rawDetections) {
             RoadIssue.DefectClass defectClass = mapClassToDefect(det.classId);
@@ -431,23 +431,25 @@ public class InferenceService {
         EvidenceFrame frame,
         RoadIssue.DefectClass defectClass,
         double confidence,
-        double lat,
-        double lon,
+        Double lat,
+        Double lon,
         RoadIssue.DetectionMode detectionMode
     ) {
-        Optional<RoadIssue> existingDuplicate = dedupService.findExistingDuplicate(
-            lat, lon, defectClass, frame.getHeadingDeg(), frame.getGpsAccuracyM(), frame);
+        if (lat != null && lon != null) {
+            Optional<RoadIssue> existingDuplicate = dedupService.findExistingDuplicate(
+                lat, lon, defectClass, frame.getHeadingDeg(), frame.getGpsAccuracyM(), frame);
 
-        if (existingDuplicate.isPresent()) {
-            RoadIssue existing = existingDuplicate.get();
-            existing.setObservationCount(existing.getObservationCount() + 1);
-            existing.setLastSeenAt(Instant.now());
-            if (confidence > (existing.getConfidenceScore() != null ? existing.getConfidenceScore() : 0)) {
-                existing.setConfidenceScore(confidence);
+            if (existingDuplicate.isPresent()) {
+                RoadIssue existing = existingDuplicate.get();
+                existing.setObservationCount(existing.getObservationCount() + 1);
+                existing.setLastSeenAt(Instant.now());
+                if (confidence > (existing.getConfidenceScore() != null ? existing.getConfidenceScore() : 0)) {
+                    existing.setConfidenceScore(confidence);
+                }
+                log.info("Aggregated genuine observation into existing RoadIssue #{} (Count: {})",
+                    existing.getId(), existing.getObservationCount());
+                return roadIssueRepository.save(existing);
             }
-            log.info("Aggregated genuine observation into existing RoadIssue #{} (Count: {})",
-                existing.getId(), existing.getObservationCount());
-            return roadIssueRepository.save(existing);
         }
 
         RoadIssue issue = new RoadIssue();
@@ -457,28 +459,35 @@ public class InferenceService {
         issue.setSeverity(confidence > 0.65 ? RoadIssue.Severity.HIGH : RoadIssue.Severity.MEDIUM);
         issue.setLatitude(lat);
         issue.setLongitude(lon);
-        issue.setLocationAccuracyM(frame.getGpsAccuracyM() != null ? frame.getGpsAccuracyM() : 10.0);
         issue.setConfidenceScore(confidence);
         issue.setDetectionMode(detectionMode);
         issue.setObservationCount(1);
 
-        // Confidence gating: Medium confidence [0.35, 0.65) flags for human review
-        if (confidence < 0.65) {
+        if (lat != null && lon != null) {
+            issue.setLocationSource("GPS");
+            issue.setLocationAccuracyM(frame.getGpsAccuracyM() != null ? frame.getGpsAccuracyM() : 10.0);
+            AuthorityRoutingService.AuthorityRoutingDecision routing = authorityRoutingService.resolveAuthority(
+                lat, lon, null, null, null);
+            issue.setRoadName(routing.jurisdictionDescription());
+            issue.setAddress(String.format("Location: %.5f°N, %.5f°E • %s", lat, lon, routing.authorityName()));
+        } else {
+            issue.setLocationSource("MANUAL_LOCATION_REQUIRED");
+            issue.setLocationAccuracyM(null);
+            issue.setRoadName("Manual Location Required");
+            issue.setAddress("Recorded without GPS. Citizen manual location entry required.");
+        }
+
+        // Confidence gating: Medium confidence [0.35, 0.65) or missing location flags for human review
+        if (confidence < 0.65 || "MANUAL_LOCATION_REQUIRED".equals(issue.getLocationSource())) {
             issue.setStatus(RoadIssue.IssueStatus.INVESTIGATING);
-            issue.setNotes("AWAITING_REVIEW: Medium confidence (" + String.format("%.1f%%", confidence * 100) + ") requiring citizen verification");
+            issue.setNotes("AWAITING_REVIEW: " + ("MANUAL_LOCATION_REQUIRED".equals(issue.getLocationSource()) ? "Location missing (offline GPS recording)" : "Medium confidence (" + String.format("%.1f%%", confidence * 100) + ") requiring citizen verification"));
         } else {
             issue.setStatus(RoadIssue.IssueStatus.DETECTED);
         }
 
-        // Truthful Authority Routing resolution (no hard-coded synthetic addresses)
-        AuthorityRoutingService.AuthorityRoutingDecision routing = authorityRoutingService.resolveAuthority(
-            lat, lon, null, null, null);
-        issue.setRoadName(routing.jurisdictionDescription());
-        issue.setAddress(String.format("Location: %.5f°N, %.5f°E • %s", lat, lon, routing.authorityName()));
-
         RoadIssue savedIssue = roadIssueRepository.save(issue);
-        log.info("Created new genuine confirmed RoadIssue #{} ({}, conf: {:.1f}%, authority: {}) at {}, {}",
-            savedIssue.getId(), defectClass, confidence * 100, routing.authorityCode(), lat, lon);
+        log.info("Created new genuine confirmed RoadIssue #{} ({}, conf: {:.1f}%, locationSource: {}) at {}, {}",
+            savedIssue.getId(), defectClass, confidence * 100, savedIssue.getLocationSource(), lat, lon);
 
         try {
             investigationService.investigateIssue(savedIssue);

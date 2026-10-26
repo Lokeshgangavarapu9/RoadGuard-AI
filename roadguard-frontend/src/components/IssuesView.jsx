@@ -9,8 +9,10 @@ import {
   Building,
   Image as ImageIcon,
   CheckCircle2,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Compass
 } from 'lucide-react';
+import { isValidCoordinate } from '../utils/geoUtils';
 
 export default function IssuesView({
   issues = [],
@@ -189,6 +191,43 @@ export default function IssuesView({
                     }}>
                       {isRealOnnx ? 'VERIFIED ONNX' : 'SIMULATED DEMO'}
                     </span>
+                    {issue.locationSource === 'MANUAL_LOCATION_REQUIRED' ? (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(245, 158, 11, 0.18)',
+                        color: '#f59e0b',
+                        border: '1px solid rgba(245, 158, 11, 0.4)'
+                      }}>
+                        LOCATION REQUIRED
+                      </span>
+                    ) : issue.locationSource === 'MANUAL_ENTRY' ? (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(56, 189, 248, 0.15)',
+                        color: '#38bdf8',
+                        border: '1px solid rgba(56, 189, 248, 0.3)'
+                      }}>
+                        MANUAL ENTRY
+                      </span>
+                    ) : (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(100, 116, 139, 0.15)',
+                        color: '#94a3b8',
+                        border: '1px solid rgba(148, 163, 184, 0.2)'
+                      }}>
+                        GPS TELEMETRY
+                      </span>
+                    )}
                   </div>
 
                   <span style={{
@@ -263,12 +302,18 @@ export default function IssuesView({
                 {/* Location & Title */}
                 <div>
                   <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>
-                    {issue.roadName || 'Public Road Corridor'}
+                    {issue.roadName || (issue.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'Unlocated Road Defect' : 'Public Road Corridor')}
                   </h4>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#94a3b8', fontSize: '12px' }}>
-                    <MapPin size={13} color="#00b4d8" style={{ flexShrink: 0 }} />
+                    <MapPin size={13} color={issue.locationSource === 'MANUAL_LOCATION_REQUIRED' ? '#f59e0b' : '#00b4d8'} style={{ flexShrink: 0 }} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {issue.address || `${issue.latitude.toFixed(5)}°N, ${issue.longitude.toFixed(5)}°E`}
+                      {issue.address
+                        ? issue.address
+                        : (isValidCoordinate(issue.latitude, issue.longitude)
+                            ? `${issue.latitude.toFixed(5)}°N, ${issue.longitude.toFixed(5)}°E`
+                            : (issue.locationSource === 'MANUAL_LOCATION_REQUIRED'
+                                ? 'Offline GPS — Manual Location Required'
+                                : 'Coordinates Pending'))}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '11px', color: '#64748b' }}>

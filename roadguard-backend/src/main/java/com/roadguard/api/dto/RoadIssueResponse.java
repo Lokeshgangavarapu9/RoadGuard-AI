@@ -24,6 +24,12 @@ public class RoadIssueResponse {
     private Instant createdAt;
     private Instant updatedAt;
 
+    private String locationSource;
+    private String cityOrTown;
+    private String district;
+    private String state;
+    private String pincode;
+
     // Attached investigation summary if present
     private String authorityCode;
     private String authorityName;
@@ -44,6 +50,11 @@ public class RoadIssueResponse {
         r.setLatitude(issue.getLatitude());
         r.setLongitude(issue.getLongitude());
         r.setLocationAccuracyM(issue.getLocationAccuracyM());
+        r.setLocationSource(issue.getLocationSource());
+        r.setCityOrTown(issue.getCityOrTown());
+        r.setDistrict(issue.getDistrict());
+        r.setState(issue.getState());
+        r.setPincode(issue.getPincode());
         r.setAddress(issue.getAddress());
         r.setRoadName(issue.getRoadName());
         r.setDetectionMode(issue.getDetectionMode());
@@ -105,4 +116,14 @@ public class RoadIssueResponse {
     public void setRepresentativeFrameId(Long representativeFrameId) { this.representativeFrameId = representativeFrameId; }
     public String getRepresentativeFrameUrl() { return representativeFrameUrl; }
     public void setRepresentativeFrameUrl(String representativeFrameUrl) { this.representativeFrameUrl = representativeFrameUrl; }
+    public String getLocationSource() { return locationSource; }
+    public void setLocationSource(String locationSource) { this.locationSource = locationSource; }
+    public String getCityOrTown() { return cityOrTown; }
+    public void setCityOrTown(String cityOrTown) { this.cityOrTown = cityOrTown; }
+    public String getDistrict() { return district; }
+    public void setDistrict(String district) { this.district = district; }
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+    public String getPincode() { return pincode; }
+    public void setPincode(String pincode) { this.pincode = pincode; }
 }

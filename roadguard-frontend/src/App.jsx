@@ -14,7 +14,8 @@ import {
   Camera,
   Activity,
   AlertCircle,
-  FileText
+  FileText,
+  Navigation
 } from 'lucide-react';
 import MapViewer from './components/MapViewer';
 import CameraViewfinder from './components/CameraViewfinder';
@@ -68,13 +69,16 @@ export default function App() {
 
   // Telemetry & Geospatial Data (genuine device sensor readings, initialized to null prior to genuine fix)
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [isGpsEnabled, setIsGpsEnabled] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState('GPS OFF'); // 'GPS OFF' | 'GPS CONNECTING' | 'GPS ACTIVE' | 'GPS ERROR' | 'GPS PERMISSION DENIED'
+  const [lastGpsFixTime, setLastGpsFixTime] = useState(null);
   const [gpsPermissionState, setGpsPermissionState] = useState('prompt'); // 'prompt' | 'granted' | 'denied' | 'unavailable'
   const [gpsErrorMessage, setGpsErrorMessage] = useState(null);
   const [gpsPath, setGpsPath] = useState([]);
   const [issues, setIssues] = useState([]);
   const [journeysList, setJourneysList] = useState([]);
   const [selectedIssue, setSelectedIssue] = useState(null);
-  const [statusMessage, setStatusMessage] = useState('System ready. Start camera and GPS to begin live road monitoring.');
+  const [statusMessage, setStatusMessage] = useState('System ready. Start camera or Driving Mode to begin live road monitoring.');
 
   // Concurrency guard ref to prevent duplicate journey creation from repeated clicks
   const isStartingJourneyRef = React.useRef(false);
@@ -181,10 +185,11 @@ export default function App() {
 
   const watcherIdRef = useRef(null);
 
-  // 2. Central Geolocation Watcher Lifecycle: Continuous high-accuracy device tracking
+  // 2. Central Geolocation Watcher Lifecycle: User-controlled high-accuracy device tracking
   const startGpsWatcher = useCallback(() => {
     if (!navigator.geolocation) {
       setGpsPermissionState('unavailable');
+      setGpsStatus('GPS ERROR');
       setGpsErrorMessage('Browser Geolocation is not supported by this device or browser.');
       return;
     }
@@ -200,6 +205,7 @@ export default function App() {
     }
 
     setGpsPermissionState('prompt');
+    setGpsStatus('GPS CONNECTING');
     setGpsErrorMessage(null);
 
     try {
@@ -214,6 +220,8 @@ export default function App() {
           }
 
           setGpsPermissionState('granted');
+          setGpsStatus('GPS ACTIVE');
+          setLastGpsFixTime(pos.timestamp || Date.now());
           setGpsErrorMessage(null);
           const pt = {
             lat,
@@ -229,13 +237,19 @@ export default function App() {
           console.warn('Device geolocation watcher notification:', err.code, err.message);
           if (err.code === 1) {
             setGpsPermissionState('denied');
+            setGpsStatus('GPS PERMISSION DENIED');
             setGpsErrorMessage('Location permission denied. Please allow GPS access in browser site settings.');
           } else if (err.code === 2) {
             setGpsPermissionState('unavailable');
+            setGpsStatus('GPS ERROR');
             setGpsErrorMessage('GPS position unavailable. Please ensure location services are enabled on device.');
           } else if (err.code === 3) {
             // Satellite lock timeout: non-blocking notice without clearing last valid position
+            setGpsStatus('GPS CONNECTING');
             setGpsErrorMessage('Searching for GPS satellite lock (outdoors with clear sky view recommended)...');
+          } else {
+            setGpsStatus('GPS ERROR');
+            setGpsErrorMessage(err.message || 'GPS location error');
           }
         },
         {
@@ -247,13 +261,13 @@ export default function App() {
       watcherIdRef.current = wId;
     } catch (watchErr) {
       console.warn('Failed to register geolocation watchPosition:', watchErr);
+      setGpsStatus('GPS ERROR');
       setGpsErrorMessage('Failed to initialize geolocation watcher: ' + watchErr.message);
     }
   }, []);
 
-  // Initialize GPS watcher on mount and teardown cleanly on unmount
+  // Teardown GPS watcher cleanly on unmount only — NEVER auto-start on page load
   useEffect(() => {
-    startGpsWatcher();
     return () => {
       if (watcherIdRef.current != null) {
         try {
@@ -262,10 +276,45 @@ export default function App() {
         watcherIdRef.current = null;
       }
     };
-  }, [startGpsWatcher]);
+  }, []);
+
+  // Explicit GPS ON/OFF Switch Action
+  const handleToggleGps = useCallback(() => {
+    if (isGpsEnabled) {
+      // TURN GPS OFF: cleanly clear watcher, clear coordinates, set state to GPS OFF
+      if (watcherIdRef.current != null) {
+        try {
+          navigator.geolocation.clearWatch(watcherIdRef.current);
+        } catch (e) {
+          console.warn('clearWatch warning:', e);
+        }
+        watcherIdRef.current = null;
+      }
+      setIsGpsEnabled(false);
+      setGpsStatus('GPS OFF');
+      setCurrentLocation(null);
+      setGpsErrorMessage(null);
+      setStatusMessage('GPS tracking disabled. System operating in offline-GPS mode (camera & AI detection fully active).');
+    } else {
+      // TURN GPS ON: requests permission and starts single watcher instance
+      if (!navigator.geolocation) {
+        setIsGpsEnabled(false);
+        setGpsStatus('GPS ERROR');
+        setGpsErrorMessage('Browser Geolocation is not supported by this device.');
+        return;
+      }
+      setIsGpsEnabled(true);
+      setGpsStatus('GPS CONNECTING');
+      setGpsErrorMessage(null);
+      setStatusMessage('Connecting to GPS satellites...');
+      startGpsWatcher();
+    }
+  }, [isGpsEnabled, startGpsWatcher]);
 
   // Geolocation retry action handler: safely restarts single watcher instance
   const handleRetryGps = useCallback(() => {
+    setIsGpsEnabled(true);
+    setGpsStatus('GPS CONNECTING');
     startGpsWatcher();
   }, [startGpsWatcher]);
 
@@ -337,39 +386,28 @@ export default function App() {
       return;
     }
 
-    // Prerequisite 2: Location permission
-    if (gpsPermissionState === 'denied') {
-      setStatusMessage('Cannot start: Location permission is denied. Please allow GPS access in browser site settings.');
-      return;
-    }
-
-    // Prerequisite 3: Genuine GPS fix
-    if (!currentLocation || currentLocation.lat == null) {
-      setStatusMessage('Cannot start: Waiting for device GPS satellite fix. Please ensure device location is enabled.');
-      return;
-    }
-
-    // Prerequisite 4: Safety accuracy threshold (e.g. 25m)
-    if (currentLocation.accuracy > settings.maxGpsAccuracy) {
-      setStatusMessage(`Cannot start: GPS accuracy (±${currentLocation.accuracy.toFixed(0)}m) is poorer than safety threshold (±${settings.maxGpsAccuracy}m). Waiting for satellite lock...`);
-      return;
+    // Determine start coordinates: attach GPS fix only if enabled, valid, and accurate
+    let startPt = null;
+    if (isGpsEnabled && currentLocation && currentLocation.lat != null) {
+      if (currentLocation.accuracy <= settings.maxGpsAccuracy) {
+        startPt = { ...currentLocation };
+      }
     }
 
     isStartingJourneyRef.current = true;
     try {
       setStatusMessage('Initiating live road-monitoring journey...');
-      const startPt = { ...currentLocation };
       const hasCam = cameraState === 'CAMERA_READY';
 
       const journey = await createJourney({
         vehicleType,
         riderName: riderName && riderName.trim() ? riderName.trim() : null,
         riderEmail: riderEmail && riderEmail.trim() ? riderEmail.trim() : null,
-        startLatitude: startPt.lat,
-        startLongitude: startPt.lon,
-        startAddress: 'Live GPS Location',
+        startLatitude: startPt ? startPt.lat : null,
+        startLongitude: startPt ? startPt.lon : null,
+        startAddress: startPt ? 'Live GPS Location' : 'Offline GPS (Manual Location Required)',
         demoMode: false,
-        demoSource: hasCam ? 'Live Mobile Dashcam' : 'GPS Route Tracker'
+        demoSource: hasCam ? 'Live Mobile Dashcam' : 'Road Inspection Run'
       });
 
       lastRecordedGpsRef.current = startPt;
@@ -377,14 +415,14 @@ export default function App() {
       setDistanceMeters(0);
       setElapsedSeconds(0);
       setActiveJourney(journey);
-      setGpsPath([startPt]);
+      setGpsPath(startPt ? [startPt] : []);
       setRecordingStatus('RECORDING');
       setCompletedJourneyBanner(null);
 
       setStatusMessage(
         hasCam
-          ? `Drive Mode Active: Journey #${journey.id}. Live Camera & ONNX AI running.`
-          : `Drive Mode Active: Journey #${journey.id}. GPS Route Tracking active (Camera is stopped).`
+          ? `Drive Mode Active: Journey #${journey.id}. Live Camera & ONNX AI running ${startPt ? 'with GPS' : '(offline GPS mode)'}.`
+          : `Drive Mode Active: Journey #${journey.id}. Road Monitoring active ${startPt ? 'with GPS' : '(offline GPS mode)'}.`
       );
     } catch (err) {
       console.error('Failed to start journey:', err);
@@ -399,12 +437,16 @@ export default function App() {
     if (cameraState === 'CAMERA_READY') {
       setCameraState('PERMISSION_REQUIRED');
       if (activeJourney) {
-        setStatusMessage(`Drive Mode active: Journey #${activeJourney.id} — Camera stopped (GPS tracking active).`);
+        setStatusMessage(`Drive Mode active: Journey #${activeJourney.id} — Camera stopped (${isGpsEnabled ? 'GPS tracking active' : 'Offline mode'}).`);
+      } else {
+        setStatusMessage('Camera stopped. Ready to start when needed.');
       }
     } else {
       setCameraState('REQUESTING_PERMISSION');
       if (activeJourney) {
         setStatusMessage(`Drive Mode active: Journey #${activeJourney.id} — Starting live dashcam feed...`);
+      } else {
+        setStatusMessage('Starting live dashcam feed...');
       }
     }
   }
@@ -538,8 +580,31 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: Recording Status & Backend Connectivity Indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Right: GPS Status, Recording Status & Backend Connectivity Indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Real-time GPS Status Indicator */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'rgba(0, 0, 0, 0.4)',
+            border: '1px solid var(--border-subtle)',
+            padding: '4px 10px',
+            borderRadius: '8px',
+            fontSize: '11px'
+          }}>
+            <div style={{
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              backgroundColor: gpsStatus === 'GPS ACTIVE' ? '#00f5a0' : (gpsStatus === 'GPS CONNECTING' ? '#f59e0b' : (gpsStatus === 'GPS OFF' ? '#64748b' : '#ff3366')),
+              boxShadow: gpsStatus === 'GPS ACTIVE' ? '0 0 8px #00f5a0' : 'none'
+            }} />
+            <span style={{ color: '#cbd5e1' }}>
+              GPS: <strong>{gpsStatus}</strong>{currentLocation?.accuracy ? ` (±${Math.round(currentLocation.accuracy)}m)` : ''}
+            </span>
+          </div>
+
           {/* Recording Status Pill */}
           <div style={{
             display: 'flex',
@@ -794,6 +859,9 @@ export default function App() {
               isJourneyActive={activeJourney != null}
               activeJourneyId={activeJourney?.id}
               currentLocation={currentLocation}
+              isGpsEnabled={isGpsEnabled}
+              gpsStatus={gpsStatus}
+              lastGpsFixTime={lastGpsFixTime}
               gpsPermissionState={gpsPermissionState}
               gpsErrorMessage={gpsErrorMessage}
               health={health}
@@ -884,22 +952,46 @@ export default function App() {
                     borderRadius: '6px',
                     fontSize: '11px',
                     fontWeight: 700,
-                    background: 'rgba(0, 245, 160, 0.1)',
-                    color: '#00f5a0',
-                    border: '1px solid rgba(0, 245, 160, 0.25)'
+                    background: isGpsEnabled ? 'rgba(0, 245, 160, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                    color: isGpsEnabled ? '#00f5a0' : '#f59e0b',
+                    border: `1px solid ${isGpsEnabled ? 'rgba(0, 245, 160, 0.25)' : 'rgba(245, 158, 11, 0.3)'}`
                   }}>
-                    OPERATING SOURCE: LIVE CAMERA + GPS
+                    {isGpsEnabled ? 'OPERATING SOURCE: LIVE CAMERA + GPS' : 'OPERATING SOURCE: CAMERA AI (GPS OFF - MANUAL LOCATION)'}
                   </span>
                 </div>
               </div>
 
-              {/* Action Buttons: Camera toggle & Start/Stop Drive Mode */}
+              {/* Action Buttons: Camera toggle, GPS toggle & Start/Stop Drive Mode */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
                   {activeJourney
-                    ? `Journey #${activeJourney.id} • ${formatDistance(distanceMeters)} • ${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')} • Acc: ±${(currentLocation?.accuracy || 0).toFixed(0)}m`
+                    ? `Journey #${activeJourney.id} • ${formatDistance(distanceMeters)} • ${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')}${isGpsEnabled && currentLocation ? ` • Acc: ±${(currentLocation?.accuracy || 0).toFixed(0)}m` : ' • Offline GPS'}`
                     : statusMessage}
                 </span>
+
+                {/* GPS ON/OFF Toggle Control */}
+                <button
+                  type="button"
+                  onClick={handleToggleGps}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: isGpsEnabled ? 'rgba(56, 189, 248, 0.18)' : 'rgba(100, 116, 139, 0.15)',
+                    border: `1px solid ${isGpsEnabled ? '#38bdf8' : 'rgba(148, 163, 184, 0.3)'}`,
+                    color: isGpsEnabled ? '#38bdf8' : '#94a3b8',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title={isGpsEnabled ? 'Turn GPS Tracking OFF' : 'Turn GPS Tracking ON'}
+                >
+                  <Navigation size={14} style={{ transform: isGpsEnabled ? 'none' : 'rotate(45deg)' }} />
+                  GPS: {isGpsEnabled ? 'ON' : 'OFF'}
+                </button>
 
                 {/* Always Accessible Camera Toggle Control */}
                 <button
@@ -1015,6 +1107,7 @@ export default function App() {
                 <div style={{ flex: 1, minHeight: '340px' }}>
                   <MapViewer
                     currentLocation={currentLocation}
+                    isGpsEnabled={isGpsEnabled}
                     path={gpsPath}
                     issues={issues}
                     onSelectIssue={(issue) => setSelectedIssue(issue)}

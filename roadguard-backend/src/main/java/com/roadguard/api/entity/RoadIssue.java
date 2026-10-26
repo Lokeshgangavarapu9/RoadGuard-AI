@@ -51,11 +51,26 @@ public class RoadIssue {
     @Column(nullable = false, length = 20)
     private Severity severity = Severity.UNKNOWN;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Double latitude;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Double longitude;
+
+    @Column(name = "location_source", length = 30)
+    private String locationSource = "GPS";
+
+    @Column(name = "city_or_town", length = 150)
+    private String cityOrTown;
+
+    @Column(length = 100)
+    private String district;
+
+    @Column(length = 100)
+    private String state;
+
+    @Column(length = 20)
+    private String pincode;
 
     @Column(name = "location_accuracy_m")
     private Double locationAccuracyM;
@@ -116,6 +131,16 @@ public class RoadIssue {
     public void setLatitude(Double latitude) { this.latitude = latitude; }
     public Double getLongitude() { return longitude; }
     public void setLongitude(Double longitude) { this.longitude = longitude; }
+    public String getLocationSource() { return locationSource; }
+    public void setLocationSource(String locationSource) { this.locationSource = locationSource; }
+    public String getCityOrTown() { return cityOrTown; }
+    public void setCityOrTown(String cityOrTown) { this.cityOrTown = cityOrTown; }
+    public String getDistrict() { return district; }
+    public void setDistrict(String district) { this.district = district; }
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+    public String getPincode() { return pincode; }
+    public void setPincode(String pincode) { this.pincode = pincode; }
     public Double getLocationAccuracyM() { return locationAccuracyM; }
     public void setLocationAccuracyM(Double locationAccuracyM) { this.locationAccuracyM = locationAccuracyM; }
     public String getAddress() { return address; }

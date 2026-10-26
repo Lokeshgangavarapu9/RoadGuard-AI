@@ -149,6 +149,7 @@ function MapController({ center, autoFollow, onUserPan, hasValidGps }) {
 
 export default function MapViewer({
   currentLocation,
+  isGpsEnabled = false,
   path = [],
   issues = [],
   onSelectIssue,
@@ -156,7 +157,7 @@ export default function MapViewer({
   gpsError = null,
   onRetryGps
 }) {
-  const hasValidGps = currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon);
+  const hasValidGps = isGpsEnabled && currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon);
   const isStale = hasValidGps && isFixStale(currentLocation.timestamp, 20000);
   const fixAgeSec = hasValidGps ? calculateFixAgeSeconds(currentLocation.timestamp) : null;
 
@@ -461,7 +462,7 @@ export default function MapViewer({
         </div>
       )}
 
-      {/* Awaiting GPS Fix Banner when no error and no valid fix */}
+      {/* GPS Status Banner when not actively locked */}
       {!hasValidGps && !gpsError && (
         <div style={{
           position: 'absolute',
@@ -469,7 +470,7 @@ export default function MapViewer({
           left: '12px',
           zIndex: 500,
           background: 'rgba(15, 23, 42, 0.85)',
-          border: '1px solid rgba(0, 245, 160, 0.3)',
+          border: `1px solid ${isGpsEnabled ? 'rgba(0, 245, 160, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
           borderRadius: '6px',
           padding: '4px 10px',
           fontSize: '11px',
@@ -480,8 +481,12 @@ export default function MapViewer({
           alignItems: 'center',
           gap: '6px'
         }}>
-          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8' }} />
-          <span>Awaiting satellite fix • Default corridor viewport shown</span>
+          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: isGpsEnabled ? '#38bdf8' : '#f59e0b' }} />
+          <span>
+            {isGpsEnabled
+              ? 'Awaiting satellite fix • Default corridor viewport shown'
+              : 'GPS Offline • Detection active with manual location mode'}
+          </span>
         </div>
       )}
 

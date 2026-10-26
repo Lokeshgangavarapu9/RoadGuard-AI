@@ -21,7 +21,9 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Terminal
+  Terminal,
+  MapPin,
+  Navigation
 } from 'lucide-react';
 import {
   autoDraftComplaint,
@@ -33,11 +35,22 @@ import {
   confirmAutomationCaptcha,
   getWorkerStatus,
   recordOfficialReceipt,
-  investigateIssue
+  investigateIssue,
+  updateIssueManualLocation
 } from '../api';
 
 export default function GrievanceModal({ issue, onClose, onComplaintSubmitted }) {
   const [loading, setLoading] = useState(true);
+  const [currentIssue, setCurrentIssue] = useState(issue);
+  const [manualRoadName, setManualRoadName] = useState(issue?.roadName || '');
+  const [manualCity, setManualCity] = useState(issue?.cityOrTown || '');
+  const [manualDistrict, setManualDistrict] = useState(issue?.district || '');
+  const [manualState, setManualState] = useState(issue?.state || 'Andhra Pradesh');
+  const [manualPincode, setManualPincode] = useState(issue?.pincode || '');
+  const [manualLat, setManualLat] = useState(issue?.latitude != null ? String(issue.latitude) : '');
+  const [manualLon, setManualLon] = useState(issue?.longitude != null ? String(issue.longitude) : '');
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [locationSuccessMsg, setLocationSuccessMsg] = useState('');
   const [investigation, setInvestigation] = useState(null);
   const [complaint, setComplaint] = useState(null);
   const [complainantName, setComplainantName] = useState('Citizen Reporter');
@@ -156,9 +169,63 @@ export default function GrievanceModal({ issue, onClose, onComplaintSubmitted })
     };
   }, [complaint]);
 
+  // Action: Citizen Saves Manual Location for Issue Detected without GPS
+  async function handleSaveManualLocation() {
+    if (!manualRoadName.trim()) {
+      setErrorMsg('Please enter a road or highway name.');
+      return;
+    }
+    if (!manualDistrict.trim()) {
+      setErrorMsg('Please enter a district for administrative routing.');
+      return;
+    }
+    try {
+      setSavingLocation(true);
+      setErrorMsg('');
+      setLocationSuccessMsg('');
+
+      const latVal = manualLat.trim() ? parseFloat(manualLat) : null;
+      const lonVal = manualLon.trim() ? parseFloat(manualLon) : null;
+
+      const payload = {
+        roadName: manualRoadName.trim(),
+        cityOrTown: manualCity.trim() || undefined,
+        district: manualDistrict.trim(),
+        state: manualState.trim() || undefined,
+        pincode: manualPincode.trim() || undefined,
+        latitude: latVal !== null && !isNaN(latVal) ? latVal : undefined,
+        longitude: lonVal !== null && !isNaN(lonVal) ? lonVal : undefined
+      };
+
+      const updated = await updateIssueManualLocation(currentIssue.id, payload);
+      setCurrentIssue(updated);
+
+      // Re-run investigation and re-draft complaint dossier
+      const inv = await investigateIssue(updated.id);
+      setInvestigation(inv);
+
+      const draft = await autoDraftComplaint(updated.id, {
+        name: complainantName,
+        email: complainantEmail,
+        phone: complainantPhone,
+      });
+      setComplaint(draft);
+      setLocationSuccessMsg('Location saved successfully! Complaint dossier updated for ' + (inv.candidateAuthorityName || 'Authority'));
+    } catch (err) {
+      console.error('Failed to update manual location:', err);
+      setErrorMsg('Failed to save location: ' + err.message);
+    } finally {
+      setSavingLocation(false);
+    }
+  }
+
   // Action: Citizen Approves & Dispatches Filing Job to Automation Worker
   async function handleApproveAndSubmit() {
     if (!complaint) return;
+    if (currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED') {
+      setErrorMsg('Cannot submit to government portal: Road defect location details are required. Please fill in and save the location form above.');
+      return;
+    }
     try {
       setSubmitting(true);
       setErrorMsg('');
@@ -257,7 +324,10 @@ export default function GrievanceModal({ issue, onClose, onComplaintSubmitted })
 
   function handleDownloadReceipt() {
     if (!complaint || !complaint.officialReferenceId) return;
-    const text = `========================================================\nROADGUARD AI — OFFICIAL CIVIC GRIEVANCE RECEIPT\n========================================================\nOfficial Reference ID : ${complaint.officialReferenceId}\nStatus                : SUBMITTED (VERIFIED)\nPortal                : ${activeJob?.portalId || 'Official Government Portal'}\nSubmission Timestamp  : ${complaint.submittedAt || new Date().toISOString()}\nCitizen Name          : ${complaint.complainantName || 'Citizen'}\nDefect Classification : ${issue.defectClass}\nGPS Coordinates       : ${issue.latitude?.toFixed(5)}°N, ${issue.longitude?.toFixed(5)}°E\nRoad Corridor         : ${issue.roadName || 'Civic Corridor'}\n========================================================\n\nSUBMITTED GRIEVANCE DOSSIER:\n\n${complaint.bodyText || ''}\n`;
+    const coordsStr = currentIssue?.latitude != null && currentIssue?.longitude != null
+      ? `${currentIssue.latitude.toFixed(5)}°N, ${currentIssue.longitude.toFixed(5)}°E`
+      : 'Manual Location Reported (GPS Telemetry Absent)';
+    const text = `========================================================\nROADGUARD AI — OFFICIAL CIVIC GRIEVANCE RECEIPT\n========================================================\nOfficial Reference ID : ${complaint.officialReferenceId}\nStatus                : SUBMITTED (VERIFIED)\nPortal                : ${activeJob?.portalId || 'Official Government Portal'}\nSubmission Timestamp  : ${complaint.submittedAt || new Date().toISOString()}\nCitizen Name          : ${complaint.complainantName || 'Citizen'}\nDefect Classification : ${currentIssue?.defectClass}\nCoordinates           : ${coordsStr}\nLocation Source       : ${currentIssue?.locationSource || 'GPS_TELEMETRY'}\nRoad Corridor         : ${currentIssue?.roadName || 'Civic Corridor'}\nDistrict / State      : ${currentIssue?.district || 'General'}, ${currentIssue?.state || 'AP'}\n========================================================\n\nSUBMITTED GRIEVANCE DOSSIER:\n\n${complaint.bodyText || ''}\n`;
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -693,6 +763,167 @@ export default function GrievanceModal({ issue, onClose, onComplaintSubmitted })
           ) : (
             /* Citizen Review Screen & Dossier */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Manual Location Entry Card (Especially for Offline/Unlocated Defects) */}
+              <div style={{
+                background: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED'
+                  ? 'rgba(245, 158, 11, 0.08)'
+                  : 'rgba(30, 41, 59, 0.35)',
+                border: `1px solid ${currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
+                borderRadius: '12px',
+                padding: '16px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? '#f59e0b' : '#38bdf8' }}>
+                    <MapPin size={16} />
+                    <strong style={{ fontSize: '13px' }}>
+                      {currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED'
+                        ? 'Location Required — Offline Incident'
+                        : 'Civic Location & Provenance'}
+                    </strong>
+                  </div>
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                    color: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? '#f59e0b' : '#38bdf8',
+                    border: `1px solid ${currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'rgba(245, 158, 11, 0.4)' : 'rgba(56, 189, 248, 0.3)'}`
+                  }}>
+                    {currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'ACTION REQUIRED' : (currentIssue?.locationSource === 'MANUAL_ENTRY' ? 'CITIZEN REPORTED' : 'GPS TELEMETRY')}
+                  </span>
+                </div>
+
+                {currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' && (
+                  <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#fef3c7', lineHeight: 1.5 }}>
+                    This defect was recorded while GPS tracking was OFF or unavailable. Before submitting to the government portal, please provide the road and district details for proper administrative routing.
+                  </p>
+                )}
+
+                {locationSuccessMsg && (
+                  <div style={{
+                    padding: '8px 12px',
+                    background: 'rgba(0, 245, 160, 0.15)',
+                    border: '1px solid rgba(0, 245, 160, 0.3)',
+                    borderRadius: '6px',
+                    color: '#00f5a0',
+                    fontSize: '12px',
+                    marginBottom: '12px'
+                  }}>
+                    {locationSuccessMsg}
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                      Road / Highway Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. NH-16 Near Benz Circle"
+                      value={manualRoadName}
+                      onChange={(e) => setManualRoadName(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', background: '#090d16', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                      Village / Town / City
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Vijayawada"
+                      value={manualCity}
+                      onChange={(e) => setManualCity(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', background: '#090d16', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                      District *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. NTR District"
+                      value={manualDistrict}
+                      onChange={(e) => setManualDistrict(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', background: '#090d16', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                      State
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Andhra Pradesh"
+                      value={manualState}
+                      onChange={(e) => setManualState(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', background: '#090d16', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                      PIN Code
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="e.g. 520010"
+                      value={manualPincode}
+                      onChange={(e) => setManualPincode(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', background: '#090d16', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                      Coordinates (Optional WGS84)
+                    </label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <input
+                        type="text"
+                        placeholder="Lat"
+                        value={manualLat}
+                        onChange={(e) => setManualLat(e.target.value)}
+                        style={{ width: '50%', padding: '8px 6px', background: '#090d16', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '11px', boxSizing: 'border-box' }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Lon"
+                        value={manualLon}
+                        onChange={(e) => setManualLon(e.target.value)}
+                        style={{ width: '50%', padding: '8px 6px', background: '#090d16', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fff', fontSize: '11px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveManualLocation}
+                    disabled={savingLocation}
+                    style={{
+                      padding: '8px 16px',
+                      background: 'rgba(56, 189, 248, 0.2)',
+                      border: '1px solid #38bdf8',
+                      color: '#38bdf8',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    {savingLocation ? <RefreshCw size={12} className="spin" /> : <Check size={12} />}
+                    {savingLocation ? 'Saving Location...' : 'Save & Update Dossier'}
+                  </button>
+                </div>
+              </div>
+
               {/* Review Card: All fields to be submitted */}
               <div style={{
                 background: 'rgba(30, 41, 59, 0.4)',
@@ -713,10 +944,10 @@ export default function GrievanceModal({ issue, onClose, onComplaintSubmitted })
                   marginBottom: '12px'
                 }}>
                   <div><span style={{ color: '#64748b' }}>Authority: </span><strong>{investigation?.candidateAuthorityName || 'NHAI'}</strong></div>
-                  <div><span style={{ color: '#64748b' }}>Defect Category: </span><strong>{issue.defectClass}</strong></div>
-                  <div><span style={{ color: '#64748b' }}>GPS Coordinates: </span><strong>{issue.latitude?.toFixed(5)}°N, {issue.longitude?.toFixed(5)}°E</strong></div>
-                  <div><span style={{ color: '#64748b' }}>Corridor: </span><strong>{issue.roadName || 'Identified Highway'}</strong></div>
-                  <div><span style={{ color: '#64748b' }}>Confidence: </span><strong>{((issue.confidenceScore || 0.85) * 100).toFixed(1)}% (ONNX)</strong></div>
+                  <div><span style={{ color: '#64748b' }}>Defect Category: </span><strong>{currentIssue?.defectClass}</strong></div>
+                  <div><span style={{ color: '#64748b' }}>Coordinates: </span><strong>{currentIssue?.latitude != null && currentIssue?.longitude != null ? `${currentIssue.latitude.toFixed(5)}°N, ${currentIssue.longitude.toFixed(5)}°E` : 'Manual Location Reported'}</strong></div>
+                  <div><span style={{ color: '#64748b' }}>Corridor: </span><strong>{currentIssue?.roadName || 'Identified Highway'}</strong></div>
+                  <div><span style={{ color: '#64748b' }}>Location Source: </span><strong style={{ color: currentIssue?.locationSource === 'MANUAL_ENTRY' ? '#38bdf8' : (currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? '#f59e0b' : '#00f5a0') }}>{currentIssue?.locationSource === 'MANUAL_ENTRY' ? 'Citizen Reported' : (currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'Location Required' : 'GPS Telemetry')}</strong></div>
                   <div><span style={{ color: '#64748b' }}>Filing Mode: </span><strong style={{ color: '#38bdf8' }}>{filingMode === 'MOCK' ? 'Safe Mock Portal' : 'Live Official Portal'}</strong></div>
                 </div>
 
@@ -749,8 +980,10 @@ export default function GrievanceModal({ issue, onClose, onComplaintSubmitted })
 
               {/* Ready to submit banner */}
               <div style={{
-                background: 'rgba(2, 132, 199, 0.12)',
-                border: '1px solid rgba(2, 132, 199, 0.3)',
+                background: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED'
+                  ? 'rgba(245, 158, 11, 0.1)'
+                  : 'rgba(2, 132, 199, 0.12)',
+                border: `1px solid ${currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(2, 132, 199, 0.3)'}`,
                 borderRadius: '10px',
                 padding: '12px 16px',
                 display: 'flex',
@@ -760,31 +993,38 @@ export default function GrievanceModal({ issue, onClose, onComplaintSubmitted })
                 gap: '12px'
               }}>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#38bdf8' }}>
-                    Ready to submit to Government Portal
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? '#f59e0b' : '#38bdf8' }}>
+                    {currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED'
+                      ? 'Location Required Before Submission'
+                      : 'Ready to submit to Government Portal'}
                   </div>
                   <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                    Citizen authorization required. The Playwright automation worker will open the portal, input the factual dossier, and await your OTP/CAPTCHA input.
+                    {currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED'
+                      ? 'Save road name and district above so RoadGuard AI can resolve the correct road department.'
+                      : 'Citizen authorization required. The Playwright automation worker will open the portal, input the factual dossier, and await your OTP/CAPTCHA input.'}
                   </div>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleApproveAndSubmit}
-                  disabled={submitting || (activeJob && ['RUNNING', 'AWAITING_OTP', 'AWAITING_CAPTCHA'].includes(activeJob.status))}
+                  disabled={submitting || currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' || (activeJob && ['RUNNING', 'AWAITING_OTP', 'AWAITING_CAPTCHA'].includes(activeJob.status))}
                   style={{
                     padding: '10px 22px',
-                    background: 'linear-gradient(135deg, #00f5a0 0%, #00b4d8 100%)',
-                    color: '#04121d',
+                    background: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED'
+                      ? 'rgba(100, 116, 139, 0.3)'
+                      : 'linear-gradient(135deg, #00f5a0 0%, #00b4d8 100%)',
+                    color: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? '#94a3b8' : '#04121d',
                     border: 'none',
                     borderRadius: '8px',
                     fontSize: '13px',
                     fontWeight: 700,
-                    cursor: 'pointer',
+                    cursor: currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px'
                   }}
+                  title={currentIssue?.locationSource === 'MANUAL_LOCATION_REQUIRED' ? 'Please fill in and save location above' : 'Approve and submit to portal'}
                 >
                   {submitting ? (
                     <>

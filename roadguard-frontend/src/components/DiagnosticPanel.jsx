@@ -25,6 +25,9 @@ export default function DiagnosticPanel({
   isJourneyActive,
   activeJourneyId,
   currentLocation,
+  isGpsEnabled = false,
+  gpsStatus = 'GPS OFF',
+  lastGpsFixTime = null,
   gpsPermissionState, // 'prompt' | 'granted' | 'denied' | 'unavailable'
   gpsErrorMessage,
   health,
@@ -34,7 +37,7 @@ export default function DiagnosticPanel({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const hasValidGps = currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon);
+  const hasValidGps = isGpsEnabled && currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon);
   const isStale = hasValidGps && isFixStale(currentLocation.timestamp, 20000);
   const fixAgeSec = hasValidGps ? calculateFixAgeSeconds(currentLocation.timestamp) : null;
 
@@ -56,22 +59,32 @@ export default function DiagnosticPanel({
   }
 
   // Derive human-readable GPS tracking status
-  let gpsStatusLabel = 'ACQUIRING';
-  let gpsColor = '#f59e0b';
-  if (gpsPermissionState === 'denied') {
-    gpsStatusLabel = 'DENIED';
+  let gpsStatusLabel = 'GPS OFF';
+  let gpsColor = '#94a3b8';
+
+  if (!isGpsEnabled) {
+    gpsStatusLabel = 'GPS OFF';
+    gpsColor = '#94a3b8';
+  } else if (gpsPermissionState === 'denied' || gpsStatus === 'GPS PERMISSION DENIED') {
+    gpsStatusLabel = 'GPS PERMISSION DENIED';
     gpsColor = '#ef4444';
-  } else if (gpsPermissionState === 'unavailable') {
-    gpsStatusLabel = 'UNAVAILABLE';
+  } else if (gpsPermissionState === 'unavailable' || gpsStatus === 'GPS ERROR') {
+    gpsStatusLabel = 'GPS ERROR';
     gpsColor = '#ef4444';
-  } else if (hasValidGps) {
+  } else if (hasValidGps || gpsStatus === 'GPS ACTIVE') {
     if (isStale) {
-      gpsStatusLabel = 'STALE';
+      gpsStatusLabel = 'GPS ACTIVE (STALE)';
       gpsColor = '#f59e0b';
     } else {
-      gpsStatusLabel = 'LOCKED';
+      gpsStatusLabel = 'GPS ACTIVE';
       gpsColor = '#00f5a0';
     }
+  } else if (gpsStatus === 'GPS CONNECTING') {
+    gpsStatusLabel = 'GPS CONNECTING';
+    gpsColor = '#38bdf8';
+  } else {
+    gpsStatusLabel = gpsStatus || 'GPS CONNECTING';
+    gpsColor = '#f59e0b';
   }
 
   // Derive AI model status
@@ -216,9 +229,11 @@ export default function DiagnosticPanel({
               {gpsStatusLabel} {hasValidGps && currentLocation.accuracy ? `(±${Math.round(currentLocation.accuracy)}m)` : ''}
             </div>
             <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-              {hasValidGps
-                ? (isStale ? `Stale reading (${fixAgeSec}s ago)` : `Live Satellite Lock (${fixAgeSec != null ? `${fixAgeSec}s ago` : 'now'})`)
-                : (gpsErrorMessage || 'Searching for satellite signal...')}
+              {!isGpsEnabled
+                ? 'GPS tracking OFF. Defects saved for manual location tagging.'
+                : (hasValidGps
+                    ? (isStale ? `Stale reading (${fixAgeSec}s ago)` : `Live Satellite Lock (${fixAgeSec != null ? `${fixAgeSec}s ago` : 'now'}${lastGpsFixTime ? ` • Fix: ${new Date(lastGpsFixTime).toLocaleTimeString()}` : ''})`)
+                    : (gpsErrorMessage || 'Searching for satellite signal...'))}
             </div>
           </div>
 
@@ -234,14 +249,18 @@ export default function DiagnosticPanel({
               <span>COORDINATES (WGS84)</span>
             </div>
             <div style={{ marginTop: '4px', fontSize: '12px', fontWeight: 600, color: hasValidGps ? '#f8fafc' : '#64748b', fontFamily: 'monospace' }}>
-              {hasValidGps
-                ? `${currentLocation.lat.toFixed(5)}°N, ${currentLocation.lon.toFixed(5)}°E`
-                : 'No Valid Fix'}
+              {!isGpsEnabled
+                ? 'GPS Disabled (Offline)'
+                : (hasValidGps
+                    ? `${currentLocation.lat.toFixed(5)}°N, ${currentLocation.lon.toFixed(5)}°E`
+                    : 'No Valid Fix')}
             </div>
             <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-              {hasValidGps
-                ? (currentLocation.speed ? `Speed: ${(currentLocation.speed * 3.6).toFixed(0)} km/h • Head: ${currentLocation.heading?.toFixed(0) || 0}°` : 'Stationary')
-                : 'Awaiting device GPS coordinates'}
+              {!isGpsEnabled
+                ? 'Captured incidents will require manual location entry'
+                : (hasValidGps
+                    ? (currentLocation.speed ? `Speed: ${(currentLocation.speed * 3.6).toFixed(0)} km/h • Head: ${currentLocation.heading?.toFixed(0) || 0}°` : 'Stationary')
+                    : 'Awaiting device GPS coordinates')}
             </div>
           </div>
 

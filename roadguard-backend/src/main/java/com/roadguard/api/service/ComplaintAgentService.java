@@ -112,6 +112,7 @@ public class ComplaintAgentService {
         // State Machine Transition: Check if human review is needed
         if (issue.getConfidenceScore() != null && issue.getConfidenceScore() < 0.65 ||
             issue.getLocationAccuracyM() != null && issue.getLocationAccuracyM() > 25.0 ||
+            "MANUAL_LOCATION_REQUIRED".equals(issue.getLocationSource()) ||
             routing.requiresUserConfirmation()) {
             complaint.setStatus(Complaint.ComplaintStatus.AWAITING_REVIEW);
             issue.setStatus(RoadIssue.IssueStatus.INVESTIGATING);
@@ -133,6 +134,10 @@ public class ComplaintAgentService {
     public Complaint approveComplaint(Long complaintId) {
         Complaint complaint = complaintRepository.findById(complaintId)
             .orElseThrow(() -> new IllegalArgumentException("Complaint not found: " + complaintId));
+        RoadIssue issue = complaint.getRoadIssue();
+        if (issue != null && "MANUAL_LOCATION_REQUIRED".equals(issue.getLocationSource())) {
+            throw new IllegalStateException("Cannot approve complaint: Manual location entry is required before submission.");
+        }
         complaint.setStatus(Complaint.ComplaintStatus.READY_TO_SUBMIT);
         complaint.setApprovedAt(Instant.now());
         Complaint saved = complaintRepository.save(complaint);
@@ -241,7 +246,33 @@ public class ComplaintAgentService {
 
     private String buildFactualComplaintBody(RoadIssue issue, AuthorityRoutingService.AuthorityRoutingDecision routing, String name, String phone) {
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm:ss 'IST'").withZone(ZoneId.of("Asia/Kolkata"));
-        String timeStr = fmt.format(issue.getFirstSeenAt());
+        String timeStr = issue.getFirstSeenAt() != null ? fmt.format(issue.getFirstSeenAt()) : "N/A";
+
+        String locationDetails;
+        if (issue.getLatitude() != null && issue.getLongitude() != null) {
+            String sourceLabel = "MANUAL_ENTRY".equalsIgnoreCase(issue.getLocationSource())
+                ? "Manually Reported by Citizen"
+                : "Vehicle GPS Telemetry";
+            locationDetails = String.format("""
+               - Location Source       : %s
+               - Coordinates           : %.6f°N, %.6f°E (Accuracy: ±%.1fm)
+               - Identified Corridor   : %s
+               - Address Details       : %s""",
+                sourceLabel,
+                issue.getLatitude(), issue.getLongitude(),
+                issue.getLocationAccuracyM() != null ? issue.getLocationAccuracyM() : 10.0,
+                issue.getRoadName() != null ? issue.getRoadName() : "Civic Corridor",
+                issue.getAddress() != null ? issue.getAddress() : "N/A"
+            );
+        } else {
+            locationDetails = String.format("""
+               - Location Source       : Manually Reported by Citizen (Offline GPS / No Fix)
+               - Identified Corridor   : %s
+               - Address Details       : %s""",
+                issue.getRoadName() != null ? issue.getRoadName() : "Unassigned Corridor",
+                issue.getAddress() != null ? issue.getAddress() : "Manual details pending"
+            );
+        }
 
         return String.format("""
             TO:
@@ -258,8 +289,7 @@ public class ComplaintAgentService {
             1. DEFECT TELEMETRY & LOCATION:
                - Defect Classification : %s
                - Severity Level        : %s
-               - GPS Coordinates       : %.6f°N, %.6f°E (Accuracy: ±%.1fm)
-               - Identified Corridor   : %s
+            %s
                - Detection Timestamp   : %s
                - Observation Count     : %d verified video frames
                - Model Confidence      : %.1f%%
@@ -285,9 +315,7 @@ public class ComplaintAgentService {
             issue.getDefectClass() + " at " + (issue.getRoadName() != null ? issue.getRoadName() : "Road Corridor"),
             issue.getDefectClass(),
             issue.getSeverity(),
-            issue.getLatitude(), issue.getLongitude(),
-            issue.getLocationAccuracyM() != null ? issue.getLocationAccuracyM() : 10.0,
-            issue.getRoadName() != null ? issue.getRoadName() : "Unassigned Corridor",
+            locationDetails,
             timeStr,
             issue.getObservationCount(),
             (issue.getConfidenceScore() != null ? issue.getConfidenceScore() * 100 : 85.0),

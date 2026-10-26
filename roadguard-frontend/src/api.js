@@ -222,6 +222,16 @@ export async function investigateIssue(id) {
   return res.json();
 }
 
+export async function updateIssueManualLocation(issueId, locationData) {
+  const res = await fetchWithTimeout(`${API_BASE}/issues/${issueId}/location`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(locationData),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function autoDraftComplaint(issueId, { name, email, phone }) {
   const params = new URLSearchParams({ issueId });
   if (name) params.append('complainantName', name);
