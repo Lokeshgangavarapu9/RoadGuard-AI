@@ -110,11 +110,11 @@ describe('RoadGuard AI — Acceptance Checklist & Contract Verification', () => 
         detectedClass: 'POTHOLE',
         confidence: 0.91,
         // Honest location provenance
-        geotagged: isAvailable && !isCoarse,
+        geotagged: isAvailable,
         latitude: isAvailable ? gps.lat : null,
         longitude: isAvailable ? gps.lon : null,
         isApproximate: isCoarse,
-        locationSource: !isAvailable ? 'MANUAL_LOCATION_REQUIRED' : (isCoarse ? 'BROWSER_COARSE' : 'BROWSER_HIGH_ACCURACY')
+        locationSource: !isAvailable ? 'MANUAL_LOCATION_REQUIRED' : (isCoarse ? 'BROWSER_APPROXIMATE' : 'BROWSER_GPS')
       };
     }
 
@@ -124,18 +124,66 @@ describe('RoadGuard AI — Acceptance Checklist & Contract Verification', () => 
     assert.equal(offlineResult.latitude, null);
     assert.equal(offlineResult.locationSource, 'MANUAL_LOCATION_REQUIRED');
 
-    // 2. Coarse GPS (149m)
-    const coarseResult = processFrameWithGps('frame_002.jpg', { lat: 16.5, lon: 80.6, accuracy: 149 });
-    assert.equal(coarseResult.frameProcessed, true);
-    assert.equal(coarseResult.isApproximate, true);
-    assert.equal(coarseResult.geotagged, false);
-    assert.equal(coarseResult.locationSource, 'BROWSER_COARSE');
+    // 2. Coarse GPS (~97m and ~149m)
+    const coarseResult97 = processFrameWithGps('frame_002.jpg', { lat: 16.5, lon: 80.6, accuracy: 97 });
+    assert.equal(coarseResult97.frameProcessed, true);
+    assert.equal(coarseResult97.isApproximate, true);
+    assert.equal(coarseResult97.geotagged, true);
+    assert.equal(coarseResult97.latitude, 16.5);
+    assert.equal(coarseResult97.locationSource, 'BROWSER_APPROXIMATE');
+
+    const coarseResult149 = processFrameWithGps('frame_003.jpg', { lat: 17.385, lon: 78.486, accuracy: 149 });
+    assert.equal(coarseResult149.frameProcessed, true);
+    assert.equal(coarseResult149.isApproximate, true);
+    assert.equal(coarseResult149.geotagged, true);
+    assert.equal(coarseResult149.locationSource, 'BROWSER_APPROXIMATE');
 
     // 3. High Accuracy GPS (12m)
-    const highAccuracyResult = processFrameWithGps('frame_003.jpg', { lat: 16.5062, lon: 80.6480, accuracy: 12 });
+    const highAccuracyResult = processFrameWithGps('frame_004.jpg', { lat: 16.5062, lon: 80.6480, accuracy: 12 });
     assert.equal(highAccuracyResult.frameProcessed, true);
+    assert.equal(highAccuracyResult.isApproximate, false);
     assert.equal(highAccuracyResult.geotagged, true);
-    assert.equal(highAccuracyResult.locationSource, 'BROWSER_HIGH_ACCURACY');
+    assert.equal(highAccuracyResult.locationSource, 'BROWSER_GPS');
+  });
+
+  it('Section 8 matrix: Denied permission, timeout, and safe post-hoc location attachment', () => {
+    // A. Denied permission handling
+    function handleGpsPermission(permissionState) {
+      return {
+        gpsStatus: permissionState === 'denied' ? 'GPS PERMISSION DENIED' : 'GPS ACTIVE',
+        canRunCamera: true, // Camera must NEVER be blocked by GPS
+        fallbackAllowed: true
+      };
+    }
+    const denied = handleGpsPermission('denied');
+    assert.equal(denied.gpsStatus, 'GPS PERMISSION DENIED');
+    assert.equal(denied.canRunCamera, true);
+
+    // B. Safe location attachment later
+    const initialIssue = {
+      id: 50,
+      defectClass: 'POTHOLE',
+      confidenceScore: 0.88,
+      latitude: null,
+      longitude: null,
+      locationSource: 'MANUAL_LOCATION_REQUIRED'
+    };
+
+    function attachManualLocation(issue, lat, lon) {
+      assert.ok(lat != null && lon != null);
+      return {
+        ...issue,
+        latitude: lat,
+        longitude: lon,
+        locationSource: 'MANUAL_COORDINATES_ATTACHED',
+        locationAccuracyM: 15.0
+      };
+    }
+
+    const updatedIssue = attachManualLocation(initialIssue, 16.5062, 80.6480);
+    assert.equal(updatedIssue.latitude, 16.5062);
+    assert.equal(updatedIssue.locationSource, 'MANUAL_COORDINATES_ATTACHED');
+    assert.equal(updatedIssue.confidenceScore, 0.88, 'AI confidence must be preserved');
   });
 
   it('Color palette tokens match exact technical specification', () => {

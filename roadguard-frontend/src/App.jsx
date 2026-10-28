@@ -403,17 +403,10 @@ export default function App() {
             return;
           }
 
-          // Quality Gate 3: Handle coarse fixes (>50m accuracy) without freezing GPS status
-          if (accuracy > 50) {
-            console.warn('Coarse GPS fix received:', accuracy, 'm accuracy');
-            setCoarseLocation({ lat, lon, accuracy, timestamp });
-            setGpsStatus(`GPS WEAK (±${Math.round(accuracy)}m)`);
-            setGpsErrorMessage(`GPS accuracy is coarse (±${Math.round(accuracy)}m from Wi-Fi/Cell). Automated road geotagging requires <50m. Map centered in coarse region.`);
-            return;
-          }
-          if (currentLocationRef.current?.accuracy <= 25 && accuracy > 35 && (timestamp - currentLocationRef.current.timestamp) < 15000) {
-            console.warn('Ignored coarse cell-tower degradation:', accuracy, 'm vs previous', currentLocationRef.current.accuracy, 'm');
-            return;
+          // Quality Gate 3: Accept valid browser coordinates even when accuracy is coarse (e.g. ±97m or ±149m)
+          const isCoarse = accuracy > 50;
+          if (isCoarse) {
+            console.info('Coarse GPS fix accepted as approximate:', accuracy, 'm accuracy');
           }
 
           // Quality Gate 4: Reject stale or out-of-order packets
@@ -421,21 +414,22 @@ export default function App() {
             return;
           }
 
-          setCoarseLocation(null);
-          setGpsPermissionState('granted');
-          setGpsStatus('GPS ACTIVE');
-          setLastGpsFixTime(timestamp);
-          setGpsErrorMessage(null);
           const pt = {
             lat,
             lon,
             speed: pos.coords.speed != null && Number.isFinite(pos.coords.speed) ? pos.coords.speed : null,
             heading: pos.coords.heading != null && Number.isFinite(pos.coords.heading) ? pos.coords.heading : null,
             accuracy,
+            isApproximate: isCoarse,
             timestamp
           };
           currentLocationRef.current = pt;
           setCurrentLocation(pt);
+          setCoarseLocation(isCoarse ? pt : null);
+          setGpsPermissionState('granted');
+          setGpsStatus(isCoarse ? `GPS APPROXIMATE (±${Math.round(accuracy)}m)` : 'GPS ACTIVE');
+          setLastGpsFixTime(timestamp);
+          setGpsErrorMessage(isCoarse ? `Approximate location (±${Math.round(accuracy)}m). High-precision GPS not required.` : null);
         },
         (err) => {
           console.warn('Device geolocation watcher notification:', err.code, err.message);
@@ -628,12 +622,10 @@ export default function App() {
       return;
     }
 
-    // Determine start coordinates: attach GPS fix only if enabled, valid, and accurate
+    // Determine start coordinates: attach GPS fix if enabled and valid (including approximate fixes)
     let startPt = null;
-    if (isGpsEnabled && currentLocation && currentLocation.lat != null) {
-      if (currentLocation.accuracy <= settings.maxGpsAccuracy) {
-        startPt = { ...currentLocation };
-      }
+    if (isGpsEnabled && currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon)) {
+      startPt = { ...currentLocation };
     }
 
     isStartingJourneyRef.current = true;
@@ -1062,8 +1054,8 @@ export default function App() {
         {/* VIEW 1: Live Road Scanner Dashboard */}
         {(activeView === 'scanner' || activeView === 'dashboard') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%' }}>
-            {/* GPS Signal Warning or Permission Notice (Non-blocking inline panels) */}
-            {currentLocation && currentLocation.accuracy > settings.maxGpsAccuracy && (
+            {/* GPS Signal Warning or Approximate Location Indicator (Non-blocking inline panels) */}
+            {currentLocation && currentLocation.accuracy > 50 && (
               <div style={{
                 background: 'rgba(245, 158, 11, 0.12)',
                 border: '1px solid rgba(245, 158, 11, 0.4)',
@@ -1090,13 +1082,13 @@ export default function App() {
                   </div>
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#fef08a', letterSpacing: '0.02em' }}>
-                      GPS SIGNAL TOO WEAK FOR ROAD AUDIT
+                      APPROXIMATE BROWSER LOCATION ACTIVE
                     </div>
                     <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
-                      Current reported accuracy: <strong style={{ color: '#f59e0b' }}>{currentLocation.accuracy.toFixed(0)}m</strong> &bull; Required accuracy: <strong style={{ color: '#00f5a0' }}>&le; {settings.maxGpsAccuracy}m</strong>
+                      Reported accuracy: <strong style={{ color: '#f59e0b' }}>±{currentLocation.accuracy.toFixed(0)}m</strong> &bull; Coordinates accepted as approximate for prototype.
                     </div>
                     <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                      Keep waiting for a higher-precision satellite fix, or try moving outdoors with an unobstructed view of the sky.
+                      Camera inference, pothole detection, and journey route tracking continue unhindered.
                     </div>
                   </div>
                 </div>
