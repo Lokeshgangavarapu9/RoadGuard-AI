@@ -206,3 +206,4 @@ describe('RoadGuard AI — Coarse GPS Quality Gate & Map Centering Logic', () =>
     assert.deepEqual(c4, [13.0827, 80.2707]);
   });
 });
+

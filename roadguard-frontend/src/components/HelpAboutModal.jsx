@@ -12,6 +12,16 @@ import {
 } from 'lucide-react';
 
 export default function HelpAboutModal({ isOpen, onClose }) {
+  React.useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
