@@ -33,7 +33,9 @@ export default function DiagnosticPanel({
   health,
   lastInferenceError,
   distanceMeters = 0,
-  elapsedSeconds = 0
+  elapsedSeconds = 0,
+  backendError = null,
+  onRetryBackend = null
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 

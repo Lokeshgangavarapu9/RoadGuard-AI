@@ -128,7 +128,7 @@ const ICONS = {
 };
 
 // Map Recenter & Auto-Follow Handler
-function MapController({ center, autoFollow, onUserPan, hasValidGps }) {
+function MapController({ center, autoFollow, onUserPan, shouldFollow }) {
   const map = useMap();
 
   useEffect(() => {
@@ -140,10 +140,10 @@ function MapController({ center, autoFollow, onUserPan, hasValidGps }) {
   }, [map, onUserPan]);
 
   useEffect(() => {
-    if (autoFollow && hasValidGps && center && center[0] && center[1]) {
+    if (autoFollow && shouldFollow && center && center[0] && center[1]) {
       map.setView(center, map.getZoom(), { animate: true });
     }
-  }, [center, autoFollow, hasValidGps, map]);
+  }, [center, autoFollow, shouldFollow, map]);
 
   return null;
 }
@@ -168,6 +168,7 @@ function MapClickHandler({ onManualPinSelect }) {
 
 export default function MapViewer({
   currentLocation,
+  coarseLocation = null,
   isGpsEnabled = false,
   path = [],
   issues = [],
@@ -182,6 +183,7 @@ export default function MapViewer({
   const hasValidGps = isGpsEnabled && currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon);
   const isStale = hasValidGps && isFixStale(currentLocation.timestamp, 20000);
   const fixAgeSec = hasValidGps ? calculateFixAgeSeconds(currentLocation.timestamp) : null;
+  const hasValidCoarse = !hasValidGps && coarseLocation && isValidCoordinate(coarseLocation.lat, coarseLocation.lon);
 
   // Viewport center fallback (Corridor area), purely for map initialization
   const defaultCenter = [16.5062, 80.6480];
@@ -189,7 +191,9 @@ export default function MapViewer({
     ? [currentLocation.lat, currentLocation.lon]
     : (manualLocation && isValidCoordinate(manualLocation.lat, manualLocation.lon)
       ? [manualLocation.lat, manualLocation.lon]
-      : defaultCenter);
+      : (hasValidCoarse
+        ? [coarseLocation.lat, coarseLocation.lon]
+        : defaultCenter));
 
   const [autoFollow, setAutoFollow] = useState(true);
   const [_tileError, setTileError] = useState(false);
@@ -213,6 +217,8 @@ export default function MapViewer({
       mapRef.current.setView([currentLocation.lat, currentLocation.lon], 16, { animate: true });
     } else if (manualLocation && isValidCoordinate(manualLocation.lat, manualLocation.lon) && mapRef.current) {
       mapRef.current.setView([manualLocation.lat, manualLocation.lon], 16, { animate: true });
+    } else if (hasValidCoarse && mapRef.current) {
+      mapRef.current.setView([coarseLocation.lat, coarseLocation.lon], 14, { animate: true });
     }
   }
 
@@ -237,7 +243,7 @@ export default function MapViewer({
         <MapController
           center={center}
           autoFollow={autoFollow}
-          hasValidGps={hasValidGps}
+          shouldFollow={hasValidGps || (manualLocation && isValidCoordinate(manualLocation.lat, manualLocation.lon)) || hasValidCoarse}
           onUserPan={() => setAutoFollow(false)}
         />
 
@@ -339,6 +345,42 @@ export default function MapViewer({
               </div>
             </Popup>
           </Marker>
+        )}
+
+        {/* Coarse Location Region Indicator (Rendered when GPS accuracy > 50m, e.g. Wi-Fi / IP) */}
+        {hasValidCoarse && (
+          <>
+            <Circle
+              center={[coarseLocation.lat, coarseLocation.lon]}
+              radius={Math.min(coarseLocation.accuracy || 200, 1000)}
+              pathOptions={{
+                color: '#f59e0b',
+                fillColor: '#f59e0b',
+                fillOpacity: 0.12,
+                weight: 2,
+                dashArray: '6, 8'
+              }}
+            />
+            <Marker
+              position={[coarseLocation.lat, coarseLocation.lon]}
+              icon={createMarkerIcon('#f59e0b', false, '🌐')}
+            >
+              <Popup>
+                <div style={{ padding: '6px', fontSize: '12px' }}>
+                  <strong style={{ color: '#f59e0b' }}>Approximate Area (Coarse Fix)</strong>
+                  <p style={{ margin: '4px 0 0', color: '#cbd5e1' }}>
+                    Lat: {coarseLocation.lat.toFixed(4)}°, Lon: {coarseLocation.lon.toFixed(4)}°
+                  </p>
+                  <div style={{ marginTop: '4px', fontSize: '11px', color: '#fbbf24' }}>
+                    Accuracy: &plusmn;{Math.round(coarseLocation.accuracy)}m (Wi-Fi/Cell Tower).
+                  </div>
+                  <div style={{ marginTop: '4px', fontSize: '10px', color: '#94a3b8' }}>
+                    Click anywhere on the map to place an exact manual pin for defect reporting.
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          </>
         )}
 
         {/* Confirmed Road Defect Markers (validated coordinates only) */}

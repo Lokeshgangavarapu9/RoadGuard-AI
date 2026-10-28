@@ -70,6 +70,7 @@ export default function App() {
 
   // Telemetry & Geospatial Data (genuine device sensor readings, initialized to null prior to genuine fix)
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [coarseLocation, setCoarseLocation] = useState(null);
   const [manualLocation, setManualLocation] = useState(null);
   const [isGpsEnabled, setIsGpsEnabled] = useState(false);
   const [gpsStatus, setGpsStatus] = useState('GPS OFF'); // 'GPS OFF' | 'GPS CONNECTING' | 'GPS ACTIVE' | 'GPS ERROR' | 'GPS PERMISSION DENIED'
@@ -259,9 +260,12 @@ export default function App() {
             return;
           }
 
-          // Quality Gate 3: Reject coarse fixes (>50m accuracy) and coarse cell-tower degradation
+          // Quality Gate 3: Handle coarse fixes (>50m accuracy) without freezing GPS status
           if (accuracy > 50) {
-            console.warn('Ignored coarse GPS fix:', accuracy, 'm accuracy');
+            console.warn('Coarse GPS fix received:', accuracy, 'm accuracy');
+            setCoarseLocation({ lat, lon, accuracy, timestamp });
+            setGpsStatus(`GPS WEAK (±${Math.round(accuracy)}m)`);
+            setGpsErrorMessage(`GPS accuracy is coarse (±${Math.round(accuracy)}m from Wi-Fi/Cell). Automated road geotagging requires <50m. Map centered in coarse region.`);
             return;
           }
           if (currentLocationRef.current?.accuracy <= 25 && accuracy > 35 && (timestamp - currentLocationRef.current.timestamp) < 15000) {
@@ -274,6 +278,7 @@ export default function App() {
             return;
           }
 
+          setCoarseLocation(null);
           setGpsPermissionState('granted');
           setGpsStatus('GPS ACTIVE');
           setLastGpsFixTime(timestamp);
@@ -349,6 +354,7 @@ export default function App() {
       setIsGpsEnabled(false);
       setGpsStatus('GPS OFF');
       setCurrentLocation(null);
+      setCoarseLocation(null);
       setGpsErrorMessage(null);
       setStatusMessage('GPS tracking disabled. System operating in offline-GPS mode (camera & AI detection fully active).');
     } else {
@@ -361,6 +367,7 @@ export default function App() {
       }
       setIsGpsEnabled(true);
       setGpsStatus('GPS CONNECTING');
+      setCoarseLocation(null);
       setGpsErrorMessage(null);
       setStatusMessage('Connecting to GPS satellites...');
       startGpsWatcher();
@@ -371,6 +378,8 @@ export default function App() {
   const handleRetryGps = useCallback(() => {
     setIsGpsEnabled(true);
     setGpsStatus('GPS CONNECTING');
+    setCoarseLocation(null);
+    setGpsErrorMessage(null);
     startGpsWatcher();
   }, [startGpsWatcher]);
 
@@ -1204,6 +1213,7 @@ export default function App() {
                 <div style={{ flex: 1, minHeight: '340px' }}>
                   <MapViewer
                     currentLocation={currentLocation}
+                    coarseLocation={coarseLocation}
                     isGpsEnabled={isGpsEnabled}
                     manualLocation={manualLocation}
                     onManualPinSelect={(pin) => setManualLocation(pin)}
