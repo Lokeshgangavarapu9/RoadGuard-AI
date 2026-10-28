@@ -279,12 +279,12 @@ export default function DiagnosticPanel({
               {modelLabel}
             </div>
             <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-              {modelLoaded ? 'ONNX Runtime Operational' : 'Model not loaded on backend'}
+              {modelLoaded ? 'ONNX Runtime Operational' : (health?.status === 'UP' ? 'Model not loaded on backend' : (backendError ? `Backend offline (${backendError})` : 'Backend offline'))}
             </div>
           </div>
 
           {/* Card 6: Diagnostic & Warning Alerts */}
-          {(gpsErrorMessage || lastInferenceError) && (
+          {(gpsErrorMessage || lastInferenceError || backendError) && (
             <div style={{
               gridColumn: '1 / -1',
               background: 'rgba(239, 68, 68, 0.1)',
@@ -297,10 +297,33 @@ export default function DiagnosticPanel({
               fontSize: '11px',
               color: '#fca5a5'
             }}>
-              <AlertTriangle size={14} color="#ef4444" style={{ flexShrink: 0 }} />
-              <div>
-                {gpsErrorMessage && <div><strong>GPS Notice:</strong> {gpsErrorMessage}</div>}
-                {lastInferenceError && <div><strong>Inference Notice:</strong> {lastInferenceError}</div>}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertTriangle size={14} color="#ef4444" style={{ flexShrink: 0 }} />
+                  <div>
+                    {backendError && <div><strong>Backend Notice:</strong> {backendError}</div>}
+                    {gpsErrorMessage && <div><strong>GPS Notice:</strong> {gpsErrorMessage}</div>}
+                    {lastInferenceError && <div><strong>Inference Notice:</strong> {lastInferenceError}</div>}
+                  </div>
+                </div>
+                {backendError && onRetryBackend && (
+                  <button
+                    type="button"
+                    onClick={onRetryBackend}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.25)',
+                      border: '1px solid rgba(239, 68, 68, 0.5)',
+                      color: '#fecaca',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Retry Connection
+                  </button>
+                )}
               </div>
             </div>
           )}

@@ -53,6 +53,7 @@ export default function App() {
   const [stats, setStats] = useState(null);
   const [isWakingBackend, setIsWakingBackend] = useState(false);
   const [wakeProgress, setWakeProgress] = useState('');
+  const [backendError, setBackendError] = useState(null);
 
   // Journey & Recording State
   const [activeJourney, setActiveJourney] = useState(null);
@@ -130,6 +131,7 @@ export default function App() {
         const h = await getHealth(4000);
         if (isMounted) {
           setHealth(h);
+          setBackendError(null);
           setIsWakingBackend(false);
         }
         const [s, iss, jList, prof] = await Promise.all([
@@ -149,6 +151,9 @@ export default function App() {
           }
         }
       } catch (err) {
+        if (isMounted) {
+          setBackendError(err.message || 'Connection failed');
+        }
         if (!wakeAttempted && isMounted) {
           wakeAttempted = true;
           setIsWakingBackend(true);
@@ -159,12 +164,14 @@ export default function App() {
             .then((resumedHealth) => {
               if (isMounted) {
                 setHealth(resumedHealth);
+                setBackendError(null);
                 setIsWakingBackend(false);
               }
             })
             .catch((wakeErr) => {
               if (isMounted) {
                 setIsWakingBackend(false);
+                setBackendError(wakeErr.message || 'Cloud wake-up timed out');
                 console.warn('Backend wake-up failed:', wakeErr.message);
               }
             });
@@ -193,6 +200,24 @@ export default function App() {
     currentLocationRef.current = currentLocation;
   }, [currentLocation]);
 
+  
+  const handleRetryBackend = useCallback(() => {
+    setIsWakingBackend(true);
+    setWakeProgress('Probing cloud backend...');
+    setBackendError(null);
+    getHealth(8000)
+      .then((h) => {
+        setHealth(h);
+        setBackendError(null);
+        setIsWakingBackend(false);
+        setStatusMessage('Backend connected: ' + (h.database || 'database ready'));
+      })
+      .catch((err) => {
+        setIsWakingBackend(false);
+        setBackendError(err.message || 'Backend unreachable');
+        setStatusMessage('Backend probe failed: ' + err.message);
+      });
+  }, []);
   // 2. Central Geolocation Watcher Lifecycle: User-controlled high-accuracy device tracking
   const startGpsWatcher = useCallback(() => {
     if (!navigator.geolocation) {
@@ -694,16 +719,20 @@ export default function App() {
           </div>
 
           {/* Backend Health Indicator */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: 'rgba(0, 0, 0, 0.4)',
-            border: '1px solid var(--border-subtle)',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            fontSize: '11px'
-          }}>
+          <div 
+            onClick={handleRetryBackend}
+            title={backendError ? ("Backend Notice: " + backendError + " (Click to retry)") : "Click to check backend status"}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(0, 0, 0, 0.4)',
+              border: '1px solid var(--border-subtle)',
+              padding: '4px 10px',
+              borderRadius: '8px',
+              fontSize: '11px',
+              cursor: 'pointer'
+            }}>
             <div style={{
               width: '7px',
               height: '7px',
@@ -930,6 +959,8 @@ export default function App() {
               gpsPermissionState={gpsPermissionState}
               gpsErrorMessage={gpsErrorMessage}
               health={health}
+              backendError={backendError}
+              onRetryBackend={handleRetryBackend}
               distanceMeters={distanceMeters}
               elapsedSeconds={elapsedSeconds}
             />

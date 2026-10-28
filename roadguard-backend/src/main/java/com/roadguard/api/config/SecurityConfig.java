@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -62,14 +64,26 @@ public class SecurityConfig {
     }
 
     @Bean
+    public UserDetailsService userDetailsService() {
+        // Explicit clean in-memory user details service to avoid generating
+        // an insecure temporary password in production logs when auth is in Stage A.
+        return new InMemoryUserDetailsManager();
+    }
+
+    @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(Arrays.asList(allowedOrigins));
-        // Allow Vercel production and preview deployments without using wildcard '*'
+        // Allow Vercel production and preview deployments
         config.addAllowedOriginPattern("https://*.vercel.app");
+        config.addAllowedOriginPattern("https://roadguard-frontend.vercel.app");
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers", "X-Worker-Secret"));
-        config.setExposedHeaders(List.of("Content-Disposition", "X-Request-Id"));
+        config.setAllowedHeaders(List.of(
+            "Authorization", "Content-Type", "Accept", "X-Requested-With",
+            "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers",
+            "X-Worker-Secret", "X-Session-ID", "X-Session-Id", "x-session-id", "*"
+        ));
+        config.setExposedHeaders(List.of("Content-Disposition", "X-Request-Id", "X-Session-ID"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
