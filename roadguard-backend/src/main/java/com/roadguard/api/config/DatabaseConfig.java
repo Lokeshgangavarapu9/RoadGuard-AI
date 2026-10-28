@@ -2,6 +2,7 @@ package com.roadguard.api.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.flyway.FlywayConfigurationCustomizer;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -224,5 +225,15 @@ public class DatabaseConfig {
             StringUtils.hasText(config.username()) ? config.username() : "(none)");
 
         return properties.initializeDataSourceBuilder().build();
+    }
+
+    @Bean
+    public FlywayConfigurationCustomizer flywayConfigurationCustomizer(DataSourceProperties properties) {
+        return configuration -> {
+            String url = properties.getUrl();
+            if (url != null && url.startsWith("jdbc:h2:")) {
+                configuration.locations("classpath:db/migration-h2");
+            }
+        };
     }
 }
