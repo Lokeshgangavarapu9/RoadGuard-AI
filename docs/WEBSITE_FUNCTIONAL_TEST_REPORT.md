@@ -4,6 +4,7 @@
 **Auditor**: Senior QA Automation Engineer, Computer Vision Engineer & Full-Stack Developer  
 **Application Tested**: RoadGuard AI (Vite Frontend + Spring Boot Backend + Playwright Worker + ONNX YOLO11s)  
 **Target Environments**:
+
 - Frontend Local URL: `http://localhost:5174`
 - Backend API & ONNX Pipeline: `http://127.0.0.1:8080` (H2 Database, ONNX Runtime, Flyway v6)
 - Local Government Mock Portal: `http://127.0.0.1:8089/mock-portal`
@@ -77,31 +78,37 @@ Every visible button, link, menu, form, toggle, tab, map control, camera control
 ## 3. End-to-End User Journeys Tested
 
 ### Journey A: GPS-Only Inspection Route
+
 - **Workflow**: Started Drive Mode without starting the camera stream.
 - **Verification**: Trip elapsed timer and distance counter started. GPS location watcher polled mock coordinates (Ravela, AP `16.4251, 80.4512`). Driving mode did **not** crash or demand that the camera be turned on. The Leaflet map updated its route trail while keeping camera hardware in `IDLE`.
 - **Outcome**: **PASS**
 
 ### Journey B: Camera Lifecycle (Start -> Stop -> Restart)
+
 - **Workflow**: Clicked "Start Camera". Verified that video stream attached to the DOM and the HUD transitioned to `LIVE CAMERA ACTIVE`. Clicked the high-contrast "Stop Camera" button in the HUD. Verified that `track.stop()` was invoked synchronously on all active tracks and `video.srcObject = null`. Re-clicked "Start Camera" without refreshing the browser.
 - **Verification**: The camera restarted cleanly with a new generation token (`cameraGenerationRef = 2`), mounting the new stream and resetting frame sequence numbers without leaking memory or throwing unhandled rejections.
 - **Outcome**: **PASS**
 
 ### Journey C: Driving Mode with Emergency Camera Decoupling
+
 - **Workflow**: Started Driving Mode. Once active, clicked the emergency camera control directly inside the drive bar. Verified that camera streaming was stopped immediately while the trip session continued logging telemetry. Re-clicked the camera button to resume recording. Finally clicked "Stop Drive Mode".
 - **Verification**: All trip resources were torn down cleanly, wake locks were released, and no background timers or geolocation watchers leaked.
 - **Outcome**: **PASS**
 
 ### Journey D: Real ONNX Defect Detection Pipeline
+
 - **Workflow**: Executed backend evaluation pipeline against 9 genuine road-surface evaluation images (potholes, alligator cracks, longitudinal cracks, clean roads).
 - **Verification**: The backend ONNX Runtime loaded `models/road_damage_yolo.onnx` (`imgsz=[512, 512]`, classes: `buraco`, `trinca_longitudinal`, `trinca_transversal`, `trinca_malha`, `tampa_bueiro`). At the production threshold of 0.25 (25%), clean roads yielded zero false positives (100% specificity), and genuine pothole craters in `defect_pothole.jpg` and `eval_potholes_road.jpg` were detected with high confidence (49.9% and 72.3%).
 - **Outcome**: **PASS**
 
 ### Journey E: Error Recovery & Stale GPS Protection
+
 - **Workflow**: Evaluated geolocation coordinates with timestamps exceeding 30 seconds and accuracy exceeding 50 meters.
 - **Verification**: When GPS accuracy was coarse (> 50m) or fix was stale, frame upload telemetry sanitized latitude and longitude to `null` and flagged the event as `unlocated: true`, ensuring invalid or stale coordinates never falsely geotag road-damage reports.
 - **Outcome**: **PASS**
 
 ### Journey F: Civic Navigation & Citizen Profile Persistence
+
 - **Workflow**: Navigated through all 7 views in the Navigation Drawer. Modified citizen profile details (Full Legal Name, Mobile Number, Email). Clicked "Save Personal Info".
 - **Verification**: Payload was transmitted to `/api/v1/profile` on the backend, stored in the H2 database, and survived component unmount/remount.
 - **Outcome**: **PASS**
@@ -121,6 +128,7 @@ Every visible button, link, menu, form, toggle, tab, map control, camera control
 ## 5. Automated Quality Gate Execution Summary
 
 ### A. Frontend Unit Tests (`npm test` in `roadguard-frontend`)
+
 ```text
 ✔ Coordinate Validation & Geospatial Telemetry (5 tests)
 ✔ Leaflet Coordinate Order & Marker Protection (2 tests)
@@ -131,6 +139,7 @@ Total: 14 tests, 5 suites, 14 passed, 0 failed (306ms)
 ```
 
 ### B. Frontend Production Build (`npm run build` in `roadguard-frontend`)
+
 ```text
 vite v8.3.5 building client environment for production...
 ✓ 2190 modules transformed.
@@ -141,6 +150,7 @@ dist/assets/index-hE9EBMty.js        2,050.98 kB │ gzip: 583.14 kB
 ```
 
 ### C. Backend Full Test Suite (`.\mvnw.cmd test` in `roadguard-backend`)
+
 ```text
 Tests run: 45, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
@@ -148,6 +158,7 @@ Total time: 14:39 min (Full Spring Boot context, Flyway v6 migrations, JPA, ONNX
 ```
 
 ### D. Worker & Mock Government Portal E2E (`npm run test:all` in `roadguard-worker`)
+
 ```text
 ✔ Mock Government Portal Citizen Handoff & Reference Extraction (15.0s)
 ✔ Full Website Browser Audit: Every Button, Control, and Journey (47.5s)

@@ -12,6 +12,7 @@
 **RoadGuard AI** is a mobile-first, AI-assisted road safety and public grievance redressal management system designed specifically for the road networks of India (with specialized baseline mapping for Andhra Pradesh corridors, including NH-16, State Highways, and Urban Local Bodies).
 
 ### Intended Real-World Citizen Workflow
+
 1. **Citizen Onboarding & Identity**: The citizen accesses the app, configures their personal details (Name, Contact Phone, Email, Residential Address), and registers their Vehicle Registration Number (VRN) and vehicle class (Car, Two-Wheeler, Heavy Vehicle).
 2. **Sensor Permission & Geolocation Lock**: The web client requests device Camera (`getUserMedia`) and Location (`navigator.geolocation`) permissions. The app evaluates hardware GPS fix accuracy (rejecting accuracy > 25m or unconfirmed coordinate jitter).
 3. **Drive Mode Initiation & Route Telemetry**: The user initiates a journey. High-frequency GPS points are recorded, filtered via Haversine geodesic distance algorithms (filtering jitter < 2m and implausible jumps > 500m), and transmitted in batches to the Spring Boot backend (`POST /api/v1/journeys/{id}/gps`).
@@ -28,6 +29,7 @@
 ## 2. Actual Technology Stack
 
 ### Java Backend (`roadguard-backend`)
+
 - **Runtime Environment**: Java 26 (Oracle JDK 26.0.1 HotSpot 64-Bit), Bytecode level Java 21 (`<java.version>21</java.version>`).
 - **Framework**: Spring Boot `3.3.5` with Spring Data JPA and Hibernate ORM `6.5.3.Final`.
 - **Inference Engine**: Microsoft ONNX Runtime for Java (`com.microsoft.onnxruntime:onnxruntime:1.19.0`).
@@ -37,6 +39,7 @@
 - **Build System**: Apache Maven Wrapper (`mvnw.cmd`).
 
 ### Frontend Web Client (`roadguard-frontend`)
+
 - **Core Framework**: React `19.3.1`, ReactDOM `19.3.1`.
 - **Bundler & Dev Server**: Vite `8.3.4` / `8.3.5` with `@vitejs/plugin-react` `6.1.2`.
 - **Geospatial Mapping**:
@@ -156,6 +159,7 @@ c:\Users\LOKESH\java project 2026\
 ## 4. Backend Architecture & REST API Inventory
 
 ### Spring Boot Configuration
+
 - Defined in `roadguard-backend/src/main/resources/application.properties`.
 - Configures port `8080`, H2 in-memory connection URL (`jdbc:h2:mem:roadguarddb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL`), Flyway migration location `classpath:db/migration`, local evidence base path `./uploads/evidence`, and ONNX model path `./models/road_damage_yolo.onnx`.
 
@@ -197,6 +201,7 @@ c:\Users\LOKESH\java project 2026\
 Database schema is managed by Flyway migrations in `src/main/resources/db/migration`:
 
 ### Key Tables & Relationships
+
 1. **`journeys`** (`V1`):
    - Stores journey lifecycle records (`id`, `uuid`, `status`, `vehicle_type`, `rider_name`, `rider_email`, `start_latitude`, `start_longitude`, `start_address`, `end_latitude`, `end_longitude`, `end_address`, `distance_meters`, `started_at`, `stopped_at`, `total_frames`, `processed_frames`, `demo_mode`).
 2. **`gps_locations`** (`V1`):
@@ -238,6 +243,7 @@ Database schema is managed by Flyway migrations in `src/main/resources/db/migrat
 ## 6. AI Vision & ONNX Model Pipeline
 
 ### Model Details
+
 - **Weights File Path**: `roadguard-backend/models/road_damage_yolo.onnx`
 - **File Size**: `37,873,634 bytes` (37.8 MB)
 - **SHA-256 Digest**: `E5284300D75F57890487C52A0428578B9A6803DF1FD0A1B9F83A30CB3972D0CA`
@@ -245,6 +251,7 @@ Database schema is managed by Flyway migrations in `src/main/resources/db/migrat
 - **License**: AGPL-3.0 License (`https://ultralytics.com/license`). Requires network copyleft if offered over a network.
 
 ### Tensor Input & Preprocessing
+
 - **Tensor Node Name**: `images`
 - **Shape**: `[1, 3, 512, 512]` (Batch: 1, Channels: 3, Height: 512, Width: 512)
 - **Data Type**: `FLOAT`
@@ -255,6 +262,7 @@ Database schema is managed by Flyway migrations in `src/main/resources/db/migrat
   4. Packs into planar CHW format (Channel R buffer &rarr; Channel G buffer &rarr; Channel B buffer) within a direct `FloatBuffer`.
 
 ### Tensor Output & Class Decoding
+
 - **Tensor Node Name**: `output0`
 - **Shape**: `[1, 9, 5376]` (Batch: 1, Features: 9, Candidate Anchors: 5,376)
 - **Feature Layout per Anchor `i`**:
@@ -269,6 +277,7 @@ Database schema is managed by Flyway migrations in `src/main/resources/db/migrat
   - `output[0][8][i]`: Class 4 score — `tampa_bueiro` (manhole cover — explicitly ignored as utility infrastructure, not road damage)
 
 ### Post-Processing & Filtering
+
 - **Confidence Threshold**: Configured at `0.25` (25%) in `application.properties`.
 - **Non-Maximum Suppression (NMS)**: Greedy class-aware NMS with an IoU threshold of `0.45`.
 - **Temporal Window Confirmation**: Managed by `temporalWindows` (`Map<Long, Deque<WindowObservation>>`). Evaluates the last 4 frames (`windowSize=4`). Requires at least 2 detections (`minConfirmations=2`) of the same defect class before persisting a confirmed `RoadIssue`.
@@ -279,6 +288,7 @@ Database schema is managed by Flyway migrations in `src/main/resources/db/migrat
 ## 7. Frontend Architecture & UI Components
 
 ### Top-Level State Management (`App.jsx`)
+
 - Controls active view (`dashboard`, `issues`, `journeys`, `reports`, `profile`, `settings`).
 - Polls backend health & stats every 5 seconds (`GET /api/v1/health`, `GET /api/v1/stats`, `GET /api/v1/issues`).
 - Coordinates geolocation watcher (`navigator.geolocation.watchPosition` with high accuracy mode).
@@ -286,6 +296,7 @@ Database schema is managed by Flyway migrations in `src/main/resources/db/migrat
 - Subsystem Diagnostics Strip: Displays individual status badges for Backend, Database (H2), AI Model (ONNX), GPS Sensor, Camera, and Maps Engine.
 
 ### Component Breakdown
+
 1. **`MapViewer.jsx`**:
    - Leaflet 2D raster map (`react-leaflet`).
    - OpenStreetMap tile layer (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) with standard attribution.
@@ -388,6 +399,7 @@ Database schema is managed by Flyway migrations in `src/main/resources/db/migrat
 Detailed investigation of the three target portals confirmed the following:
 
 ### 1. Rajmargyatra / NHAI
+
 - **Portal URL**: `https://rajmargyatra.nhai.gov.in/`
 - **Governing Body**: National Highways Authority of India (NHAI / MoRTH).
 - **Road Scope**: Exclusively National Highways (e.g. NH-16, NH-65).
@@ -397,6 +409,7 @@ Detailed investigation of the three target portals confirmed the following:
 - **Integration Strategy**: Assisted Citizen Dossier (`MANUAL_HANDOFF_ONLY`). RoadGuard AI compiles verified coordinates, highway chainage, and defect photos into a standardized packet and opens the Rajmargyatra portal for citizen submission.
 
 ### 2. Andhra Pradesh CDMA (Municipal Administration)
+
 - **Portal URL**: `https://cdma.ap.gov.in/services/grievances/`
 - **Governing Body**: Commissioner & Director of Municipal Administration, AP.
 - **Road Scope**: Municipal roads, city streets, and colony avenues in 123+ Urban Local Bodies (e.g., Vijayawada, Visakhapatnam, Guntur).
@@ -406,6 +419,7 @@ Detailed investigation of the three target portals confirmed the following:
 - **Integration Strategy**: Assisted Municipal Handoff (`MANUAL_HANDOFF_ONLY`). Pre-fills municipal category (`Roads -> Potholes`), ward details, and photo attachments.
 
 ### 3. Andhra Pradesh Mee Kosam / PGRS
+
 - **Portal URL**: `https://meekosam.ap.gov.in/`
 - **Governing Body**: Real Time Governance Society (RTGS), Government of Andhra Pradesh.
 - **Road Scope**: State Highways (SH), Major District Roads (MDR), and Rural PMGSY roads.
@@ -421,6 +435,7 @@ Detailed investigation of the three target portals confirmed the following:
 The following builds and test suites were executed directly on the project codebase:
 
 ### 1. Java Backend Compilation & JUnit Test Suite
+
 - **Command**: `.\mvnw.cmd test`
 - **Runtime**: Java 26.0.1 64-Bit HotSpot
 - **Result**: **BUILD SUCCESS** (5 tests executed, 0 failures, 0 errors, 0 skipped, Total time: 34.740s).
@@ -435,11 +450,13 @@ The following builds and test suites were executed directly on the project codeb
     - Multi-frame temporal confirmation verified (4-frame window, 2 minimum hits).
 
 ### 2. Frontend Production Build
+
 - **Command**: `npm run build`
 - **Bundler**: Vite 8.3.5
 - **Result**: **BUILD SUCCESS** (0 errors, 2190 modules transformed, output in `dist/`).
 
 ### 3. Server Runtime Verification
+
 - Checked TCP listeners on ports `8080` (Backend) and `5173` (Frontend). Both ports were idle prior to inspection; servers start on demand via `mvnw.cmd spring-boot:run` and `npm run dev`.
 
 ---

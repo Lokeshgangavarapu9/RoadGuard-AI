@@ -4,6 +4,7 @@
 
 This engineering report documents the comprehensive integration audit and field-test readiness verification of RoadGuard AI.
 The full system was tested across its three core tiers:
+
 - `roadguard-backend` (Java Spring Boot, Flyway V1–V6, PostgreSQL/H2, ONNX Runtime)
 - `roadguard-frontend` (React, Vite, Leaflet, WebCrypto)
 - `roadguard-worker` (Node.js, Playwright, Chromium automation)

@@ -23,6 +23,7 @@
 ## 2. Component Adaptation & Reuse Decisions
 
 ### A. Pothole Reporter (`coding-parrot/pothole-reporter`)
+
 - **Analyzed Capabilities**:
   - Refusal to fabricate authorities: refuses to route when jurisdiction or municipal boundary is unknown.
   - Assisted user-controlled complaint action: compiles exact location, defect photo, probable contract, and opens user's email client or handoff draft.
@@ -33,6 +34,7 @@
   3. *Foreground Drive Mode Notice*: Explicit user notice on the live camera viewfinder regarding browser background throttling.
 
 ### B. Leaflet & OpenStreetMap (`Leaflet/Leaflet`)
+
 - **Analyzed Capabilities**: Lightweight 2D web mapping with high tile-rendering performance.
 - **Components Adapted for RoadGuard AI**:
   - `MapViewer.jsx`: Leaflet `MapContainer`, `TileLayer` using `https://tile.openstreetmap.org/{z}/{x}/{y}.png`.
@@ -41,11 +43,13 @@
   - Geodesic noise filtering: ignores stationary jitter (<2m) and implausible spikes (>500m).
 
 ### C. MapLibre GL JS (`maplibre/maplibre-gl-js`)
+
 - **Analyzed Capabilities**: Hardware-accelerated WebGL vector map rendering with camera pitch, tilt, and bearing control.
 - **Components Adapted for RoadGuard AI**:
   - `JourneyReportsView.jsx`: Optional 3D perspective toggle (60° pitch, 30° bearing) with seamless fallback to 2D Leaflet if WebGL hardware acceleration is unavailable.
 
 ### D. Nominatim & Reverse Geocoding
+
 - **Analyzed Capabilities**: Converting coordinates to human-readable street addresses.
 - **Components Adapted for RoadGuard AI**:
   - In `JourneyService.java` and frontend `api.js`: reverse geocoding cache to prevent redundant external queries, respecting OSM 1 request/second usage limit, and falling back to coordinate pairs when offline.

@@ -13,9 +13,10 @@
 
 ## 1. Executive Summary
 
-RoadGuard AI is an automated, real-time edge road defect detection and civic complaint routing platform tailored for Indian roadways (specifically Andhra Pradesh national highways, state highways, and municipal roads). 
+RoadGuard AI is an automated, real-time edge road defect detection and civic complaint routing platform tailored for Indian roadways (specifically Andhra Pradesh national highways, state highways, and municipal roads).
 
 This comprehensive engineering investigation and repair resolved critical architectural and production defects:
+
 1. **Profile API HTTP 500 Defect:** Investigated and permanently repaired the root cause of `HTTP 500` on `GET /api/v1/profile`. Removed the hard-coded citizen fallback profile (`"Lokesh Kumar"`) attempted inside a `@Transactional(readOnly = true)` method, resolved field naming mismatches (`phone` vs `phoneNumber`), added input validation with HTTP 400 Bad Request error handling, and safeguarded against unauthenticated writes.
 2. **Flyway Migration Reconciliation:** Reconciled `V3__production_cleanup_and_evidence_pipeline.sql` column definitions (`portal_id` and `official_url` replacing erroneous `dept_code` and `portal_url`), split multi-column `ALTER TABLE` statements for universal compatibility across H2 (test/local) and Render PostgreSQL, and eliminated syntax incompatibilities in partial indexes. Verified all 3 migrations pass on a clean database and adhere to Hibernate entity contracts.
 3. **Removal of Simulated Demo Behavior:** Purged synthetic camera canvas loops, fake potholes/cracks, hardcoded coordinates, mock telemetry, and synthetic complaint reference numbers (`SIM-*`, `STM-AP-*`) from the production user experience. Retained one real workflow: Live Camera + Real GPS + Genuine ONNX Model Inference.
@@ -64,18 +65,21 @@ All 36 backend automated tests (including 6 new database and profile acceptance 
 ## 4. Verified Root Causes of Profile HTTP 500 & Migration Inconsistencies
 
 ### Root Cause 1: Illegal Database Write in Read-Only Transaction
+
 * **Inspection Location:** `UserProfileService.java`, line 29
 * **Defect:** `UserProfileService` was declared with `@Transactional(readOnly = true)`. When `getProfile()` found no record in `user_profiles`, its `orElseGet()` block attempted to invoke `profileRepository.save(fallback)`.
 * **Consequence:** In PostgreSQL, executing an `INSERT` statement within a read-only transaction triggers `org.postgresql.util.PSQLException: ERROR: cannot execute INSERT in a read-only transaction`. This uncaught exception bubbled up to Tomcat, returning `HTTP 500 Internal Server Error`.
 * **Fix Applied:** Modified `getProfile()` to return an empty `UserProfile` instance without writing to the database when no record exists.
 
 ### Root Cause 2: Fabricated Citizen Identity Violation
+
 * **Inspection Location:** `UserProfileService.java`, lines 33-42
 * **Defect:** The service hardcoded personal data: `"Lokesh Kumar"`, `"lokesh.citizen@roadguard.local"`, `"+91 98765 43210"`, `"Door 4-12, Ring Road, Benz Circle, Vijayawada"`, `"AP 16 AB 1234"`.
 * **Consequence:** Violated the core mandate forbidding synthetic citizen PII in production.
 * **Fix Applied:** Eliminated all hardcoded citizen details. Default empty profile returns blank strings and `isRegistered = false`. Genuine citizen records are created exclusively via user-submitted `PUT /api/v1/profile` calls.
 
 ### Root Cause 3: Frontend-Backend Field Contract Discrepancy
+
 * **Inspection Location:** `ProfileView.jsx` and `UserProfile.java`
 * **Defect:** Frontend form managed state under property `phoneNumber`, while `UserProfile` entity had private field `phone`. Jackson deserialization ignored `phoneNumber`, leaving `request.getPhone() == null`.
 * **Consequence:** `UserProfileService.updateProfile()` threw `IllegalArgumentException: A valid 10-digit phone number is required.`, producing an uncaught server error.
@@ -85,12 +89,14 @@ All 36 backend automated tests (including 6 new database and profile acceptance 
   3. Added `@ExceptionHandler(IllegalArgumentException.class)` in `UserProfileController` returning clean HTTP 400 Bad Request JSON responses.
 
 ### Root Cause 4: Flyway V2 vs V3 Column Mismatch
+
 * **Inspection Location:** `V3__production_cleanup_and_evidence_pipeline.sql`, lines 70-87
 * **Defect:** `V3` referenced non-existent columns `dept_code` and `portal_url` on table `connected_portals`. In `V2`, the columns were created as `portal_id` and `official_url`.
 * **Consequence:** Executing `V3` against PostgreSQL would immediately abort Spring Boot startup with: `column "dept_code" of relation "connected_portals" does not exist`.
 * **Fix Applied:** Reconciled `V3` migration to reference `portal_id` and `official_url` with the exact seeded portal keys (`RAJMARGYATRA_NHAI`, `AP_CDMA`, `AP_MEEKOSAM_PGRS`).
 
 ### Root Cause 5: Database Dialect Incompatibility in Migrations
+
 * **Inspection Location:** `V3__production_cleanup_and_evidence_pipeline.sql`
 * **Defect:** Multi-column `ALTER TABLE evidence_frames ADD COLUMN IF NOT EXISTS ...` with comma separation and partial indexes (`WHERE idempotency_key IS NOT NULL`) failed under H2 in PostgreSQL mode.
 * **Fix Applied:** Converted to individual `ALTER TABLE` statements and standard unique indexes, ensuring 100% execution compatibility on both H2 and PostgreSQL.
@@ -99,7 +105,7 @@ All 36 backend automated tests (including 6 new database and profile acceptance 
 
 ## 5. Files Changed and Their Purposes
 
-```
+```text
 roadguard-backend/
 ├── src/main/java/com/roadguard/api/controller/
 │   └── UserProfileController.java          # Added @ExceptionHandler for HTTP 400 validation
@@ -158,6 +164,7 @@ roadguard-frontend/
 ## 8. Camera and GPS Geolocation Results
 
 ### Camera Capture Pipeline
+
 * **Stream Acquisition:** Uses `navigator.mediaDevices.getUserMedia` requesting `{ video: { facingMode: { ideal: 'environment' } } }`.
 * **True Pixel Origin:** Captured frames are rendered from the active `HTMLVideoElement` onto an in-memory canvas (`ctx.drawImage(video, 0, 0, width, height)`) and encoded as `image/jpeg` blobs.
 * **No Synthetic Generation:** Removed all canvas placeholder generators, artificial color bars, and looped mock video feeds from production components.
@@ -165,7 +172,7 @@ roadguard-frontend/
 
 ### 3-Tier GPS Policy
 
-```
+```text
                            [GPS Reading]
                                  │
                  ┌───────────────┼───────────────┐
@@ -184,6 +191,7 @@ roadguard-frontend/
 ## 9. AI Model and ONNX Inference Findings
 
 ### Model Contract Inspection
+
 * **Model File:** `roadguard-backend/models/road_damage_yolo.onnx` (43.2 MB)
 * **Architecture:** Ultralytics YOLO11s (Version 8.4.90, PyTorch export)
 * **Input Tensor:** `images` $\to [1, 3, 512, 512]$ (Float32, RGB, normalized $[0.0, 1.0]$)
@@ -196,6 +204,7 @@ roadguard-frontend/
   * `4`: `tampa_bueiro` (Manhole Cover — suppressed from defect counts)
 
 ### Preprocessing and Letterboxing
+
 * Aspect-ratio preserving letterbox scales images to fit within $512 \times 512$ with gray 114 padding.
 * Detections are unpadded back to original frame coordinates before storing bounding boxes.
 
@@ -230,6 +239,7 @@ roadguard-frontend/
 ## 11. Road Authority Routing
 
 `AuthorityRoutingService` accurately maps GPS coordinates to jurisdictional bodies:
+
 1. **National Highways Authority of India (NHAI):** Matched when highway chainage indicates an NH corridor (e.g. NH-16). Official portal: Rajmargyatra (`https://rajmargyatra.nhai.gov.in/`).
 2. **AP Roads & Buildings Department (R&B):** State highways and major district roads. Official portal: AP Mee Kosam / PGRS (`https://meekosam.ap.gov.in/`).
 3. **AP Commissionerate and Directorate of Municipal Administration (CDMA):** Municipal urban roads across 123+ Urban Local Bodies. Official portal: Puramithra (`https://cdma.ap.gov.in/services/grievances/`).
@@ -243,6 +253,7 @@ The platform enforces a strictly truthful 9-state complaint lifecycle:
 `DRAFT` $\to$ `AWAITING_REVIEW` $\to$ `VERIFIED` $\to$ `COMPLAINT_PREPARED` $\to$ `AWAITING_USER_ACTION` $\to$ `SUBMISSION_IN_PROGRESS` $\to$ `SUBMITTED` (or `SUBMISSION_FAILED` / `SUBMISSION_UNKNOWN`).
 
 ### 2-Step Assisted Citizen Handoff Protocol
+
 * **Step 1 (Dossier Preparation):** RoadGuard AI compiles evidence photos, SHA-256 hashes, highway chainage/coordinates, and formal statutory grounds (Section 133 CrPC public nuisance and IRC:82-2015 maintenance standards).
 * **Step 2 (Official Portal Handoff):** The citizen reviews the dossier and clicks "Proceed to Official Portal". The application opens the verified official government portal. The citizen logs in using required OTP/Aadhaar/CAPTCHA credentials and files the grievance directly.
 * **Step 3 (Receipt Recording):** The citizen returns and enters the genuine government reference number. The backend validates the format and rejects any synthetic prefixes (`SIM-*`, `STM-AP-*`).
@@ -279,25 +290,31 @@ The platform enforces a strictly truthful 9-state complaint lifecycle:
 ## 15. Automated Test Commands and Results
 
 ### Command 1: Backend Automated Test Suite
+
 ```powershell
 .\mvnw.cmd test
 ```
+
 * **Executed:** 36 tests across 4 test suites.
 * **Results:** `Tests run: 36, Failures: 0, Errors: 0, Skipped: 0`
 * **Status:** `BUILD SUCCESS` (Total time: 2 min 9 s)
 
 ### Command 2: Database Migration & Profile Acceptance Suite
+
 ```powershell
 .\mvnw.cmd test -Dtest=DatabaseMigrationTest
 ```
+
 * **Executed:** 6 acceptance tests verifying clean migration to V3, safe empty profile retrieval, genuine profile saving, update persistence, input validation rejection, and portal status verification.
 * **Results:** `Tests run: 6, Failures: 0, Errors: 0, Skipped: 0`
 * **Status:** `BUILD SUCCESS` (Total time: 43.8 s)
 
 ### Command 3: Frontend Production Build
+
 ```powershell
 npm run build
 ```
+
 * **Results:** 2,188 modules transformed; built client bundle in 4.09 s with zero errors.
 * **Status:** `SUCCESS`
 
@@ -305,20 +322,20 @@ npm run build
 
 ## 16. Final Acceptance Checklist
 
-- [x] Profile endpoint returns valid JSON without HTTP 500.
-- [x] Profile saving works without hardcoded default citizen identities.
-- [x] Flyway migrations V1, V2, and V3 apply cleanly to fresh databases.
-- [x] Synthetic canvas replay removed from production workflow.
-- [x] Live camera captures actual video pixels with resource cleanup.
-- [x] 3-tier GPS accuracy recovery implemented and active.
-- [x] Genuine ONNX YOLO11s model loaded with aspect-ratio letterboxing.
-- [x] Manhole cover (`tampa_bueiro`) suppressed from road defect counts.
-- [x] Multi-factor geospatial deduplication prevents duplicate complaints.
-- [x] Evidence files verified via SHA-256 and stored persistently.
-- [x] Authority routing maps to NHAI, AP R&B, and AP CDMA appropriately.
-- [x] Truthful 2-step civic portal handoff eliminates fake reference generation.
-- [x] All 36 backend tests and frontend production build pass completely.
-- [x] Git commits pushed to `origin main` for automated production deployment.
+* [x] Profile endpoint returns valid JSON without HTTP 500.
+* [x] Profile saving works without hardcoded default citizen identities.
+* [x] Flyway migrations V1, V2, and V3 apply cleanly to fresh databases.
+* [x] Synthetic canvas replay removed from production workflow.
+* [x] Live camera captures actual video pixels with resource cleanup.
+* [x] 3-tier GPS accuracy recovery implemented and active.
+* [x] Genuine ONNX YOLO11s model loaded with aspect-ratio letterboxing.
+* [x] Manhole cover (`tampa_bueiro`) suppressed from road defect counts.
+* [x] Multi-factor geospatial deduplication prevents duplicate complaints.
+* [x] Evidence files verified via SHA-256 and stored persistently.
+* [x] Authority routing maps to NHAI, AP R&B, and AP CDMA appropriately.
+* [x] Truthful 2-step civic portal handoff eliminates fake reference generation.
+* [x] All 36 backend tests and frontend production build pass completely.
+* [x] Git commits pushed to `origin main` for automated production deployment.
 
 ---
 

@@ -3,6 +3,7 @@
 ## 1. Overview & Architecture
 
 RoadGuard AI implements an evidence-driven road-damage inspection pipeline combining:
+
 * **Browser Geolocation API (`navigator.geolocation`)** for live trajectory recording, accuracy evaluation, and spatial deduplication.
 * **Media Capture API (`navigator.mediaDevices.getUserMedia`)** configured with `facingMode: { ideal: 'environment' }` for real road hazard inspection.
 * **Microsoft ONNX Runtime Java** on the Spring Boot backend executing an AGPL-3.0 YOLO11s model (`./models/road_damage_yolo.onnx`) over genuine road frames.
@@ -13,7 +14,9 @@ RoadGuard AI implements an evidence-driven road-damage inspection pipeline combi
 ## 2. Live GPS Telemetry Pipeline
 
 ### 2.1 Configuration & Acquisition
+
 The GPS pipeline in `App.jsx` and `MapViewer.jsx` uses the browser's high-accuracy Geolocation API:
+
 ```javascript
 const watchId = navigator.geolocation.watchPosition(
   (position) => handleFreshFix(position),
@@ -27,7 +30,9 @@ const watchId = navigator.geolocation.watchPosition(
 ```
 
 ### 2.2 Truthful Permission & Hardware States
+
 The interface strictly avoids fabricating coordinates. The following states are reported truthfully:
+
 * `prompt`: Awaiting citizen permission with an explanatory banner.
 * `granted`: Active GNSS fix received from browser hardware.
 * `denied`: Citizen denied location permission; UI provides clear recovery instructions and a "Retry Permission" button.
@@ -35,11 +40,13 @@ The interface strictly avoids fabricating coordinates. The following states are 
 * `timeout`: Satellite signal acquisition timed out (common indoors or under heavy foliage).
 
 ### 2.3 Noise Filtering & Jitter Rejection
+
 1. **Accuracy Threshold**: Fixes with an accuracy radius greater than 25 meters (`accuracy > 25m`) are marked degraded and excluded from route distance calculations.
 2. **Stationary Jitter Suppression**: If the computed geodesic distance between consecutive fixes is below 2.0 meters while recorded speed is near zero (`< 0.5 m/s`), the point is recorded but suppressed from inflating the odometer total.
 3. **Plausibility Bounds**: Discards implausible coordinate jumps (> 50 m/s or 180 km/h) caused by multipath GNSS reflections.
 
 ### 2.4 Journey Storage & Backend Ingestion
+
 * Fixes are batched and ingested via `POST /api/v1/journeys/{journeyId}/gps`.
 * GpsLocation records are permanently linked to the specific `Journey` entity.
 * When a journey stops, `clearWatch(watchId)` is called immediately to prevent battery drain.
@@ -49,7 +56,9 @@ The interface strictly avoids fabricating coordinates. The following states are 
 ## 3. Real Camera Evidence Pipeline
 
 ### 3.1 Device Constraint Strategy
+
 The camera subsystem in `CameraViewfinder.jsx` requests the device's rear-facing camera:
+
 ```javascript
 const constraints = {
   video: {
@@ -63,10 +72,12 @@ const stream = await navigator.mediaDevices.getUserMedia(constraints);
 ```
 
 ### 3.2 Safety & Operation Rules
+
 * **Stationary Operation / Passenger Mode**: RoadGuard AI explicitly warns the user: *"Mount device securely before travel. Review evidence and submit grievances only while safely stationary."*
 * **Foreground Execution**: Camera capture requires the browser tab to remain visible. A background notice alerts the user if the tab is minimized.
 
 ### 3.3 Frame Capture & Integrity Preservation
+
 1. **Raw Frame Ingestion**: Frames are captured at high resolution from an offscreen HTML5 canvas element (`canvas.toBlob('image/jpeg', 0.85)`).
 2. **Cryptographic SHA-256 Digest**: The backend `EvidenceStorageService.java` streams the received multipart file through `java.security.MessageDigest.getInstance("SHA-256")`, storing the resulting 64-character hexadecimal digest alongside the frame record.
 3. **Geotag Linking**: Each frame is immutably tagged with:

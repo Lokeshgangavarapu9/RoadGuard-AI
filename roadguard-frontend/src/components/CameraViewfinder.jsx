@@ -97,6 +97,12 @@ export default function CameraViewfinder({
 
   const frameIntervalSec = settings.frameInterval || 2.8;
 
+  // Decouple camera capture & inference loop from rapid GPS state updates
+  const currentLocationRef = useRef(currentLocation);
+  useEffect(() => {
+    currentLocationRef.current = currentLocation;
+  }, [currentLocation]);
+
   // 1. WakeLock management during active drive mode
   useEffect(() => {
     async function requestWakeLock() {
@@ -358,12 +364,13 @@ export default function CameraViewfinder({
           console.warn('WebCrypto SHA-256 unavailable:', hashErr);
         }
 
-        const rawLat = currentLocation?.lat;
-        const rawLon = currentLocation?.lon;
-        const accuracy = currentLocation?.accuracy;
-        const heading = currentLocation?.heading;
-        const speed = currentLocation?.speed;
-        const timestamp = currentLocation?.timestamp;
+        const latestLoc = currentLocationRef.current;
+        const rawLat = latestLoc?.lat;
+        const rawLon = latestLoc?.lon;
+        const accuracy = latestLoc?.accuracy;
+        const heading = latestLoc?.heading;
+        const speed = latestLoc?.speed;
+        const timestamp = latestLoc?.timestamp;
 
         // Verify coordinate validity, freshness, and accuracy
         const hasValidCoords = isValidCoordinate(rawLat, rawLon);
@@ -439,7 +446,7 @@ export default function CameraViewfinder({
     }, frameIntervalSec * 1000);
 
     return () => clearInterval(interval);
-  }, [isJourneyActive, journeyId, lifecycleState, currentLocation, frameIntervalSec, onFrameProcessed, onNewDetection]);
+  }, [isJourneyActive, journeyId, lifecycleState, frameIntervalSec, onFrameProcessed, onNewDetection]);
 
   // Genuine GPS telemetry formatted for HUD chips
   const hasGenuineGps = currentLocation?.speed != null;

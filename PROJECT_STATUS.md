@@ -88,6 +88,7 @@ eval_deteriorated_asphalt.jpg| 2000x1951    | ROAD_CRACK  | trinca_malha | 61.7%
 ### B. Measured Performance Metrics
 
 *Calculation Methodology*:
+
 - **Precision**: $\frac{\text{TP}}{\text{TP} + \text{FP}}$
 - **Recall**: $\frac{\text{TP}}{\text{TP} + \text{FN}}$
 - **F1 Score**: $2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$
@@ -111,21 +112,22 @@ eval_deteriorated_asphalt.jpg| 2000x1951    | ROAD_CRACK  | trinca_malha | 61.7%
 ### A. Failure Mode Analysis
 
 1. **Misclassification on Pothole in Deteriorated Pavement (`eval_pothole_pavement.jpg`)**:
-   * *Observation*: The model detected damage with 80.0% confidence, but classified the bounding box as `trinca_malha` (alligator crack) instead of `buraco` (pothole).
-   * *Root Cause*: The asphalt surrounding the pothole exhibits dense fatigue cracking. The receptive field of the anchor spanned both the cavity and surrounding fissures, favoring the crack pattern. At the diagnostic probe (`0.10`), two `buraco` candidates were present at 19.9% and 17.1%.
+   - *Observation*: The model detected damage with 80.0% confidence, but classified the bounding box as `trinca_malha` (alligator crack) instead of `buraco` (pothole).
+   - *Root Cause*: The asphalt surrounding the pothole exhibits dense fatigue cracking. The receptive field of the anchor spanned both the cavity and surrounding fissures, favoring the crack pattern. At the diagnostic probe (`0.10`), two `buraco` candidates were present at 19.9% and 17.1%.
 2. **Sub-Threshold Misses on Fine Cracks (`defect_pavement_cracks.jpg` and `eval_longitudinal_crack.jpg`)**:
-   * *Observation*: No detections qualified under the production threshold of `0.25`.
-   * *Diagnostic Probe*: At threshold `0.10`, `defect_pavement_cracks.jpg` produced 3 candidates (`trinca_malha` at 19.6% & 15.8%, `trinca_longitudinal` at 12.2%). `eval_longitudinal_crack.jpg` produced candidates peaking at 19.0%.
-   * *Root Cause*: Input downsampling. YOLO11s downsamples full images to `512x512` pixels. An ultra-high-resolution macro photo (7952x5304) downsampled to 512x512 loses the sub-millimeter pixel contrast of narrow hairline fissures. Potholes possess high-contrast volumetric dark shadows and contours that survive 512x512 downsampling, whereas fine linear cracks blur into pavement texture.
+   - *Observation*: No detections qualified under the production threshold of `0.25`.
+   - *Diagnostic Probe*: At threshold `0.10`, `defect_pavement_cracks.jpg` produced 3 candidates (`trinca_malha` at 19.6% & 15.8%, `trinca_longitudinal` at 12.2%). `eval_longitudinal_crack.jpg` produced candidates peaking at 19.0%.
+   - *Root Cause*: Input downsampling. YOLO11s downsamples full images to `512x512` pixels. An ultra-high-resolution macro photo (7952x5304) downsampled to 512x512 loses the sub-millimeter pixel contrast of narrow hairline fissures. Potholes possess high-contrast volumetric dark shadows and contours that survive 512x512 downsampling, whereas fine linear cracks blur into pavement texture.
 
 ### B. Limitations of Small Evaluation Dataset
 
-* A 9-image dataset provides strict functional verification of pipeline execution, tensor transformations, class decoding, and threshold filtering, but cannot yield statistically significant mAP (mean Average Precision) benchmarks across diverse weather, sun angles, or camera optics.
-* We explicitly **do not claim production-grade 99% accuracy**. The empirical recall is 57.1% at the production threshold (0.25).
+- A 9-image dataset provides strict functional verification of pipeline execution, tensor transformations, class decoding, and threshold filtering, but cannot yield statistically significant mAP (mean Average Precision) benchmarks across diverse weather, sun angles, or camera optics.
+- We explicitly **do not claim production-grade 99% accuracy**. The empirical recall is 57.1% at the production threshold (0.25).
 
 ### C. Recommendation for Crack Detection Improvement
 
 To elevate crack detection recall without degrading the 100% precision:
+
 1. **Do not lower the global confidence threshold**: Lowering the threshold to 0.15 introduces spurious detections and increases false alarms on road joints and shadows.
 2. **Implement Slicing Aided Hyper Inference (SAHI)**: Divide high-resolution frames (1080p/4K) into overlapping 512x512 tiles for inference, re-mapping slice detections to full-frame coordinates. This preserves fine crack resolution without retraining.
 3. **Dual-Model Cascade**: Use the current YOLO11s for rapid full-frame pothole detection, coupled with a specialized lightweight patch classifier (or higher-resolution 640x640 / 1024x1024 model) for pavement texture distress.
@@ -136,25 +138,26 @@ To elevate crack detection recall without degrading the 100% precision:
 
 ### A. Existing System Capabilities
 
-* **Server-Side**: The Spring Boot backend only accepts discrete image files (`image/jpeg`, `image/png`) via `POST /api/v1/journeys/{id}/frames`. It does **not** contain native video container demuxers (no FFmpeg, JCodec, or OpenCV).
-* **Client-Side (HTML5 Viewfinder)**:
-  * When a journey is active, `CameraViewfinder.jsx` requests the hardware camera via `navigator.mediaDevices.getUserMedia`.
-  * Every 2.8 seconds, a timer extracts the current raster from the `<video>` element into a hidden `<canvas>`, encodes it as a JPEG blob, and posts it to the backend.
-  * The received detections (`DetectionObservation`) are fed into the UI overlay.
+- **Server-Side**: The Spring Boot backend only accepts discrete image files (`image/jpeg`, `image/png`) via `POST /api/v1/journeys/{id}/frames`. It does **not** contain native video container demuxers (no FFmpeg, JCodec, or OpenCV).
+- **Client-Side (HTML5 Viewfinder)**:
+  - When a journey is active, `CameraViewfinder.jsx` requests the hardware camera via `navigator.mediaDevices.getUserMedia`.
+  - Every 2.8 seconds, a timer extracts the current raster from the `<video>` element into a hidden `<canvas>`, encodes it as a JPEG blob, and posts it to the backend.
+  - The received detections (`DetectionObservation`) are fed into the UI overlay.
 
 ### B. Multi-Frame Temporal Confirmation Validation
 
 The backend enforces a rolling 4-frame window requiring &ge; 2 detections before a defect is confirmed as a `RoadIssue`. This was validated via `testVideoFrameSequenceTemporalConfirmation` in `OnnxInferenceRunnerTest.java`:
-* Frame 1 (`defect_pothole.jpg`): Pothole detected, window count = 1 &rarr; `Confirmed = false`.
-* Frame 2 (`eval_potholes_road.jpg`): Pothole detected, window count = 2 (&ge; 2 min confirmations) &rarr; `Confirmed = true` (Issue created).
-* Frame 3 (`clean_road.jpg`): Clean asphalt &rarr; `Confirmed = false`.
-* Frame 4 (`clean_road.jpg`): Clean asphalt &rarr; `Confirmed = false`.
+
+- Frame 1 (`defect_pothole.jpg`): Pothole detected, window count = 1 &rarr; `Confirmed = false`.
+- Frame 2 (`eval_potholes_road.jpg`): Pothole detected, window count = 2 (&ge; 2 min confirmations) &rarr; `Confirmed = true` (Issue created).
+- Frame 3 (`clean_road.jpg`): Clean asphalt &rarr; `Confirmed = false`.
+- Frame 4 (`clean_road.jpg`): Clean asphalt &rarr; `Confirmed = false`.
 
 ### C. Browser Background Monitoring Limitations & Realism
 
-* **Browser Tab Throttling**: Standard mobile browsers (Chrome on Android, Safari on iOS) aggressively suspend JavaScript timers (`setInterval`, `requestAnimationFrame`) and freeze camera video streams when the browser tab is minimized or the screen is locked to preserve battery and privacy.
-* **Truthful Capability Statement**: A mobile web application running in a browser **cannot** guarantee continuous background road monitoring while the phone is locked or navigation apps (Google Maps) are in the foreground.
-* **Proposed Smallest Compatible Implementations**:
+- **Browser Tab Throttling**: Standard mobile browsers (Chrome on Android, Safari on iOS) aggressively suspend JavaScript timers (`setInterval`, `requestAnimationFrame`) and freeze camera video streams when the browser tab is minimized or the screen is locked to preserve battery and privacy.
+- **Truthful Capability Statement**: A mobile web application running in a browser **cannot** guarantee continuous background road monitoring while the phone is locked or navigation apps (Google Maps) are in the foreground.
+- **Proposed Smallest Compatible Implementations**:
   1. *Foreground Driving Mode*: Utilize the Screen Wake Lock API (`navigator.wakeLock.request('screen')`) to prevent screen sleep while driving in an active journey.
   2. *Offline Dashcam Video Upload (Option B)*: Add `org.jcodec:jcodec` (pure Java, ~2MB) to `pom.xml` and expose `POST /api/v1/journeys/{id}/video` to asynchronously demux recorded MP4 dashcam files at 1 FPS on the server.
 
@@ -163,6 +166,7 @@ The backend enforces a rolling 4-frame window requiring &ge; 2 detections before
 ## 7. Frontend Overlay & Real Observation Verification
 
 `CameraViewfinder.jsx` was audited and updated to ensure that backend observations are faithfully reflected in the UI:
+
 1. **Dynamic Bounding Boxes**: Replaced static percentage boxes with dynamic server coordinates (`bboxX1`, `bboxY1`, `bboxX2`, `bboxY2`).
 2. **Explicit Simulation Badges**: Detections originating from demo tracks or mock journeys are explicitly labeled with `(DEMO)` / `[Simulated]`, preventing any confusion with real ONNX vision inferences.
 3. **HUD Mode Indicator**: Displays `AI ONNX INGESTION ACTIVE` during live camera journeys and `DEMO SIMULATION ACTIVE` during simulated journeys.
@@ -201,6 +205,7 @@ The backend enforces a rolling 4-frame window requiring &ge; 2 detections before
 ## 9. Open-Source UI Redesign & Source Inventory
 
 ### A. Open-Source Reference Architecture
+
 - **Primary Reference**: `coding-parrot/pothole-reporter` (MIT License, Copyright 2026 Gaurav Sen)
   - **Adapted Workflows**:
     1. Drive Mode single prominent stop button ergonomics (red high-contrast stop button when active).
@@ -217,7 +222,9 @@ The backend enforces a rolling 4-frame window requiring &ge; 2 detections before
   - Dark fleet monitoring palette: `--bg: #080c14`, `--bg-secondary: #0f1523`, `--accent-cyan: #00f5a0`, `--accent-blue: #00b4d8`, `--accent-amber: #ffb703`, `--accent-red: #ff3366`.
 
 ### B. Conservative Road Eligibility State Machine
+
 Implemented in `CameraViewfinder.jsx` with 10 explicit states:
+
 1. `CAMERA_PERMISSION_REQUIRED`: Triggered when camera access is denied or blocked.
 2. `GPS_UNAVAILABLE`: Triggered when geolocation fix is absent.
 3. `GPS_ACCURACY_POOR`: Triggered when GPS horizontal accuracy exceeds 25 meters (fails closed).
@@ -230,6 +237,7 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
 10. `STOPPED`: Monitoring inactive.
 
 ### C. Evidence Image Serving Fix
+
 - **Defect Identified**: `RoadIssueController` and `EvidenceFrameResponse` returned URLs formatted as `/uploads/evidence/{journeyId}/{filename}.jpg`. `WebConfig.java` mapped `/uploads/**` to `localStoragePath` (`./uploads/evidence`), causing Spring to search `./uploads/evidence/evidence/{journeyId}/{filename}.jpg` which resulted in HTTP 404 (black thumbnail).
 - **Resolution**: Updated `WebConfig.java` to map `/uploads/**` to both `parentDir` (`./uploads/`) and `uploadDir`. Verified via `curl -I http://localhost:8080/uploads/evidence/...` returning `HTTP/1.1 200 OK` (Content-Type: image/jpeg, 304,327 bytes).
 
@@ -242,6 +250,7 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
 **Status**: All 11 Phases Completed and Verified
 
 ### A. Root Cause Analysis (Phase 1)
+
 1. **Hardcoded Fallback Coordinates**: `currentLocation` in `App.jsx` was initialized to Vijayawada coordinates (`16.5062, 80.6480`), causing the map to render a static pin even before geolocation was acquired.
 2. **Asynchronous Polling vs Continuous Watcher**: Live location updates were previously invoked via `navigator.geolocation.getCurrentPosition` inside a 3-second `setInterval` only when `activeJourney` was active. This introduced asynchronous latency, failed to track live user location prior to starting a journey, and caused dropped fixes.
 3. **Missing Start/End & Polyline Retention**: The map did not display distinct start/end markers or persist the completed route polyline after stopping a journey.
@@ -249,6 +258,7 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
 5. **Absence of Journey Reports Menu Item**: The application lacked a dedicated Journey Reports view in the navigation drawer.
 
 ### B. Map & Geolocation Repair (Phase 2 & Phase 3)
+
 - **Zero Visual Layout Alteration**: The existing New Map / Live Monitoring screen layout, cards, color palette, buttons, and telemetry widgets were preserved completely.
 - **Genuine Device Geolocation**: Integrated `navigator.geolocation.watchPosition` with `enableHighAccuracy: true`, `timeout: 10000`, `maximumAge: 2000`.
 - **Informative Permission & Error States**: Explicit handling for `PERMISSION_DENIED`, `POSITION_UNAVAILABLE`, and `TIMEOUT` with accessible user alerts.
@@ -266,6 +276,7 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
 - **Provider Attribution & Error Detection**: Genuine OpenStreetMap tiles with `© OpenStreetMap contributors` attribution and tile loading failure retry detection.
 
 ### C. Public-Road Eligibility & Driver Safety (Phase 4)
+
 - Preserved the 10-state conservative road eligibility state machine in `CameraViewfinder.jsx`.
 - Enforces consecutive good GPS fixes before permitting road defect recording.
 - Clearly states that GPS alone cannot guarantee public road vs. private driveway; mapped road-matching is estimated.
@@ -273,6 +284,7 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
 - Persistent safety warning: *Keep app active in foreground while driving. Do not touch phone while operating vehicle.*
 
 ### D. Journey Reports Menu Item (Phase 5)
+
 - Added **Journey Reports** (`reports`) to `NavigationDrawer.jsx` alongside the 5 existing items:
   1. `New Map / Live Monitoring`
   2. `Detected Road Issues`
@@ -290,6 +302,7 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
     - One-click PDF export via `jspdf` including journey metadata, defect tables, and official simulated demonstration disclaimers.
 
 ### E. Lightweight 3D Visualisation (Phase 6)
+
 - Evaluated and integrated `maplibre-gl` (v5.1.0, BSD-3-Clause).
 - Implemented lightweight WebGL 3D map with:
   - 60° camera pitch and 20° bearing rotation.
@@ -300,11 +313,13 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
   - Zero heavy 3D engine overhead (no Blender, Unity, or Unreal dependencies).
 
 ### F. Separation of Demo and Real Telemetry (Phase 7)
+
 - Replay data is clearly labelled with `[Simulated]` and `NH-16 Synthetic Replay`.
 - Real device GPS coordinates are never fabricated. If GPS fix is unavailable or poor, monitoring displays `GPS UNAVAILABLE` or `GPS ACCURACY POOR`.
 - Disclaimer preserved: `SIMULATED DEMONSTRATION — NOT SUBMITTED TO ANY GOVERNMENT AUTHORITY`.
 
 ### G. Backend Persistence & API Contracts (Phase 8)
+
 - Updated `V1__init_roadguard_schema.sql` with:
   - `distance_meters DOUBLE PRECISION DEFAULT 0.0`
   - `end_latitude DOUBLE PRECISION`
@@ -319,6 +334,7 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
   - `GET /api/v1/journeys/1` -> Correctly returns persisted distance and coordinates.
 
 ### H. Verification & Test Outcomes (Phase 10)
+
 - **Frontend Production Build**: `npm run build` completed in 2.38s (Exit Code 0).
 - **Backend Test Suite**: `mvnw test` executed 5 tests with 0 failures, 0 errors (Exit Code 0).
 - **API Health**: `GET /api/v1/health` returns `UP` with ONNX YOLO11s loaded.
@@ -363,36 +379,43 @@ Implemented in `CameraViewfinder.jsx` with 10 explicit states:
 To advance RoadGuard AI from Stage A verification to field-hardened production readiness, the next seven improvements will be executed in this exact sequence:
 
 ### Improvement Phase 1: Reliable Live GPS
+
 - Implement continuous `Geolocation.watchPosition` with automatic reconnection on signal loss.
 - Add dynamic satellite accuracy smoothing and configurable accuracy gates (`< 15m` strict, `< 25m` standard).
 - Provide immediate retry actions and user-facing GPS permission recovery guidance.
 
 ### Improvement Phase 2: Accurate Journey Tracking
+
 - Implement moving-window Kalman or Savitzky-Golay filtering on raw GPS coordinates to eliminate jitter.
 - Implement stationary auto-pause after 10 seconds of speed $< 2\text{ km/h}$ to prevent distance inflation at traffic signals.
 - Ensure strict state isolation between consecutive journeys so a new drive starts with clean state.
 
 ### Improvement Phase 3: Road-Only Recording Eligibility
+
 - Integrate OpenStreetMap Overpass API or an offline road vector corridor lookup for Andhra Pradesh and NH corridors.
 - Introduce three explicit eligibility confidence levels: `VERIFIED_PUBLIC_ROAD`, `ESTIMATED_ROAD`, and `UNKNOWN_UNVERIFIED`.
 - Fail-safe policy: automatically suspend AI frame uploads when coordinates diverge more than 30 meters from mapped road centrelines.
 
 ### Improvement Phase 4: 2D and 3D Map Improvements
+
 - Enhance 2D Leaflet map with interactive layer toggles (satellite imagery, standard OSM, dark contrast).
 - Enhance MapLibre GL JS 3D map with smooth camera bearing tracking (auto-rotate camera in vehicle travel direction).
 - Add interactive clustering for dense defect regions to prevent marker overlap on long journeys.
 
 ### Improvement Phase 5: Journey Reports
+
 - Add route elevation profile and speed telemetry graph to the Journey Report detail view.
 - Enhance the PDF export with embedded high-resolution defect thumbnails and GIS coordinates table.
 - Provide JSON / GPX journey export for GIS integration and municipal audit compatibility.
 
 ### Improvement Phase 6: Real AI Inference Verification
+
 - Add automated model benchmark profiling (latency per frame, GPU vs CPU execution provider comparison).
 - Implement multi-class confidence tuning per defect type (e.g., lower threshold for high-consequence potholes, higher for hair cracks).
 - Add bounding box coordinate sanity checks to ensure defects lie within the road surface quadrant.
 
 ### Improvement Phase 7: Data Persistence, Privacy, and Settings
+
 - Docker Compose setup for PostgreSQL 16 + PostGIS spatial database.
 - Automated PII scrubbing: client-side or server-side automated face and vehicle license plate blurring before evidence storage.
 - Comprehensive user settings panel for telemetry intervals, storage quotas, and data retention policies.
@@ -430,6 +453,7 @@ Per Section 15 of the specification, every primary capability is categorized und
 ### B. Execution Log of Automated Verification Test Suites
 
 #### 1. Backend Test Suite (`mvnw.cmd test`)
+
 ```text
 [INFO] Running com.roadguard.api.OnnxInferenceRunnerTest
 [PROD TEST 1] Defect Pothole Image (Threshold = 0.25):
@@ -447,6 +471,7 @@ Per Section 15 of the specification, every primary capability is categorized und
 ```
 
 #### 2. Frontend Production Bundle (`npm run build`)
+
 ```text
 vite v8.3.5 building client environment for production...
 transforming...
@@ -463,6 +488,7 @@ dist/assets/index-HhBoqM5R.js        1,985.09 kB │ gzip: 571.78 kB
 ```
 
 #### 3. Full REST API Verification Suite (`test_full_verification.ps1`)
+
 ```text
 =======================================================
 ROADGUARD AI FULL END-TO-END VERIFICATION TEST SUITE
@@ -499,6 +525,7 @@ ALL REST API TESTS PASSED SUCCESSFULLY (Exit code 0)
 ## 9. Comprehensive Real Browser-Based Verification Report
 
 ### A. Test Execution Environment & Methodology
+
 - **Browser Automation Engine**: `playwright-core` (v1.64.1) driving locally installed Microsoft Edge (`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`).
 - **Target Frontend**: `http://localhost:5173` (Vite 8, React 19)
 - **Target Backend**: `http://localhost:8080/api/v1/health` (Spring Boot 3.3.5, Java 26)
@@ -522,6 +549,7 @@ ALL REST API TESTS PASSED SUCCESSFULLY (Exit code 0)
 | **12. Error Audit** | Overall layout integrity & runtime health | **PASS [✓]** | 0 uncaught page errors, 0 broken images, 0 layout shifts. |
 
 ### C. Defects Discovered & Remediations Applied
+
 1. **Playwright Container Download Failure (HTTP 404)**:
    - *Defect*: Playwright's default browser installer attempted to fetch `playwright-1.57.0-win32_x64.zip` from `playwright.azureedge.net`, which returned 404.
    - *Fix*: Configured `playwright-core` to launch the natively installed Microsoft Edge browser binary (`channel: 'msedge'`), bypassing download mirrors completely.
@@ -539,6 +567,7 @@ ALL REST API TESTS PASSED SUCCESSFULLY (Exit code 0)
    - *Fix*: Corrected the path in the test script; verified HTTP 200 with 3 confirmed defects.
 
 ### D. Tests That Could Not Run & Exact Reasons
+
 1. **Physical Outdoor Vehicle Road Driving Test**:
    - *Reason*: Requires a physical vehicle in motion on actual public highways with hardware GPS lock under sky view. Verified deterministically using recorded GPS coordinates on the NH-16 Vijayawada corridor.
 2. **Live Hardware Dashcam Pavement Defect Acquisition**:
@@ -547,6 +576,7 @@ ALL REST API TESTS PASSED SUCCESSFULLY (Exit code 0)
    - *Reason*: Stage A environment runs on H2 in-memory mode with PostgreSQL-compatible dialect. Spatial clustering and deduplication currently execute via Java Haversine mathematics.
 
 ### E. Remaining System Limitations
+
 1. **H2 In-Memory Persistence**:
    - Database tables and uploaded evidence records reset when the backend process restarts. Migration to PostgreSQL + PostGIS is scheduled for Stage B.
 2. **Mobile Browser Background Tab Suspension**:

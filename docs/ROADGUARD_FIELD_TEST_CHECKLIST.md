@@ -4,6 +4,7 @@
 
 > [!CAUTION]
 > **SAFETY FIRST — NEVER INTERACT WITH APP WHILE OPERATING A VEHICLE**
+>
 > 1. Phone must be securely attached to a windshield or dashboard mount before driving.
 > 2. The driver must NEVER touch, operate, or look at the phone screen while the vehicle is in motion.
 > 3. Start drive mode while parked. If adjustments are needed, safely pull over and park first, or have a front-seat passenger/co-driver operate the interface.

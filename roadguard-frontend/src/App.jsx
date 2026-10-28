@@ -182,8 +182,15 @@ export default function App() {
   // Refs for tracking without stale state closures
   const lastRecordedGpsRef = React.useRef(null);
   const distanceMetersRef = React.useRef(0);
+  const currentLocationRef = React.useRef(null);
+  const pendingGpsQueueRef = React.useRef([]);
 
   const watcherIdRef = useRef(null);
+
+  // Synchronize currentLocation state into ref synchronously
+  useEffect(() => {
+    currentLocationRef.current = currentLocation;
+  }, [currentLocation]);
 
   // 2. Central Geolocation Watcher Lifecycle: User-controlled high-accuracy device tracking
   const startGpsWatcher = useCallback(() => {
@@ -214,23 +221,42 @@ export default function App() {
           if (!pos || !pos.coords) return;
           const lat = pos.coords.latitude;
           const lon = pos.coords.longitude;
+          const accuracy = pos.coords.accuracy != null && Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : 10.0;
+          const timestamp = pos.timestamp || Date.now();
+
+          // Quality Gate 1: Reject Null Island (0,0)
+          if (lat === 0 && lon === 0) return;
+
+          // Quality Gate 2: Reject non-finite or out-of-bounds coordinate
           if (!isValidCoordinate(lat, lon)) {
             console.warn('Ignored non-finite or out-of-bounds coordinate:', lat, lon);
             return;
           }
 
+          // Quality Gate 3: Reject coarse fixes (>50m accuracy)
+          if (accuracy > 50) {
+            console.warn('Ignored coarse GPS fix:', accuracy, 'm accuracy');
+            return;
+          }
+
+          // Quality Gate 4: Reject stale or out-of-order packets
+          if (currentLocationRef.current && timestamp <= currentLocationRef.current.timestamp) {
+            return;
+          }
+
           setGpsPermissionState('granted');
           setGpsStatus('GPS ACTIVE');
-          setLastGpsFixTime(pos.timestamp || Date.now());
+          setLastGpsFixTime(timestamp);
           setGpsErrorMessage(null);
           const pt = {
             lat,
             lon,
             speed: pos.coords.speed != null && Number.isFinite(pos.coords.speed) ? pos.coords.speed : null,
             heading: pos.coords.heading != null && Number.isFinite(pos.coords.heading) ? pos.coords.heading : null,
-            accuracy: pos.coords.accuracy != null && Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : 10.0,
-            timestamp: pos.timestamp || Date.now()
+            accuracy,
+            timestamp
           };
+          currentLocationRef.current = pt;
           setCurrentLocation(pt);
         },
         (err) => {
@@ -254,8 +280,8 @@ export default function App() {
         },
         {
           enableHighAccuracy: true,
-          timeout: 30000,
-          maximumAge: 5000
+          timeout: 20000,
+          maximumAge: 0
         }
       );
       watcherIdRef.current = wId;
@@ -330,51 +356,85 @@ export default function App() {
     return () => clearInterval(timer);
   }, [activeJourney]);
 
-  // 4. Genuine GPS tracking & telemetry batch loop during active journey
+  // 4. Genuine GPS tracking & telemetry batch loop during active journey (decoupled from 1 Hz GPS state updates)
   useEffect(() => {
-    if (!activeJourney) return;
+    if (!activeJourney || !activeJourney.id) return;
+
+    async function flushPendingGpsQueue(journeyId) {
+      if (pendingGpsQueueRef.current.length === 0) return;
+      const batch = [...pendingGpsQueueRef.current];
+      try {
+        await sendGpsBatch(journeyId, batch);
+        // Remove successfully sent items from queue
+        pendingGpsQueueRef.current = pendingGpsQueueRef.current.slice(batch.length);
+      } catch (e) {
+        console.warn('GPS batch send buffered for retry:', e);
+      }
+    }
 
     const interval = setInterval(async () => {
-      const pt = currentLocation;
+      const pt = currentLocationRef.current;
 
       if (pt && pt.lat != null) {
-        // Geodesic distance filtering: ignore stationary jitter (<2m) and implausible jumps (>500m)
-        if (lastRecordedGpsRef.current) {
-          const stepDist = haversineDistanceMeters(
-            lastRecordedGpsRef.current.lat,
-            lastRecordedGpsRef.current.lon,
-            pt.lat,
-            pt.lon
-          );
-
-          if (stepDist >= 2.0 && stepDist <= 500.0) {
-            distanceMetersRef.current += stepDist;
-            setDistanceMeters(distanceMetersRef.current);
-            lastRecordedGpsRef.current = pt;
-            setGpsPath((prev) => [...prev, pt]);
-
-            try {
-              await sendGpsBatch(activeJourney.id, [{
-                latitude: pt.lat,
-                longitude: pt.lon,
-                speed: pt.speed,
-                heading: pt.heading,
-                accuracy: pt.accuracy
-              }]);
-            } catch (e) {
-              console.warn('GPS batch send error:', e);
-            }
-          }
-        } else {
-          // First point of journey
+        if (!lastRecordedGpsRef.current) {
+          // First point of journey (Point 0): Record AND queue for backend persistence!
           lastRecordedGpsRef.current = pt;
-          setGpsPath((prev) => (prev.length === 0 ? [pt] : prev));
+          setGpsPath([pt]);
+          pendingGpsQueueRef.current.push({
+            latitude: pt.lat,
+            longitude: pt.lon,
+            speed: pt.speed,
+            heading: pt.heading,
+            accuracy: pt.accuracy,
+            timestamp: new Date(pt.timestamp).toISOString()
+          });
+          await flushPendingGpsQueue(activeJourney.id);
+          return;
         }
+
+        const stepDist = haversineDistanceMeters(
+          lastRecordedGpsRef.current.lat,
+          lastRecordedGpsRef.current.lon,
+          pt.lat,
+          pt.lon
+        );
+
+        const dtSec = Math.max(0.5, (pt.timestamp - lastRecordedGpsRef.current.timestamp) / 1000.0);
+        const impliedSpeedMps = stepDist / dtSec;
+
+        // Filter stationary jitter: ignore movements < 2.0m
+        if (stepDist < 2.0) return;
+
+        // Reject implausible multipath spikes (>500m in <10s with speed > 45 m/s = 162 km/h)
+        if (stepDist > 500.0 && impliedSpeedMps > 45.0) {
+          console.warn('Rejected single-point GPS jump:', stepDist, 'm at', impliedSpeedMps, 'm/s');
+          return;
+        }
+
+        // Valid movement step (including post-underpass genuine movement >500m over elapsed time)
+        distanceMetersRef.current += stepDist;
+        setDistanceMeters(distanceMetersRef.current);
+        lastRecordedGpsRef.current = pt;
+        setGpsPath((prev) => [...prev, pt]);
+
+        // Bounded retry queue (max 500 items) to prevent memory leak during network drops
+        if (pendingGpsQueueRef.current.length < 500) {
+          pendingGpsQueueRef.current.push({
+            latitude: pt.lat,
+            longitude: pt.lon,
+            speed: pt.speed,
+            heading: pt.heading,
+            accuracy: pt.accuracy,
+            timestamp: new Date(pt.timestamp).toISOString()
+          });
+        }
+
+        await flushPendingGpsQueue(activeJourney.id);
       }
     }, 2500);
 
     return () => clearInterval(interval);
-  }, [activeJourney, currentLocation]);
+  }, [activeJourney?.id]);
 
   // Start Journey / Drive Mode with robust pre-flight verification & non-blocking notices
   async function handleStartJourney() {

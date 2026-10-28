@@ -245,38 +245,44 @@ powershell.exe -ExecutionPolicy Bypass -File .\test_full_verification.ps1
 
 ## Complete Documentation Index
 
-* [Portal Research & Government Channels](file:///c:/Users/LOKESH/java%20project%202026/docs/PORTAL_RESEARCH.md) — Live inspection of NHAI Rajmargyatra, AP CDMA, and AP Mee Kosam PGRS.
-* [Open-Source Components & License Audits](file:///c:/Users/LOKESH/java%20project%202026/docs/OPEN_SOURCE_REUSE.md) — Reuse analysis for `pothole-reporter`, Leaflet, MapLibre GL, OSRM, Nominatim, and YOLO11s.
-* [Camera & GPS Verification Protocol](file:///c:/Users/LOKESH/java%20project%202026/docs/CAMERA_GPS_VERIFICATION.md) — Real sensor acquisition, noise filtering, and 10-step outdoor Android checklist.
-* [Statutory Complaint Submission Workflow](file:///c:/Users/LOKESH/java%20project%202026/docs/COMPLAINT_SUBMISSION_WORKFLOW.md) — Section 133 CrPC / IRC:82-2015 grounds, evidence dossier, and citizen assisted handoff.
-* [System Status & Verification Audit Report](file:///c:/Users/LOKESH/java%20project%202026/PROJECT_STATUS.md) — Full verification matrix, benchmark metrics, and browser automation test results.
+- [Portal Research & Government Channels](file:///c:/Users/LOKESH/java%20project%202026/docs/PORTAL_RESEARCH.md) — Live inspection of NHAI Rajmargyatra, AP CDMA, and AP Mee Kosam PGRS.
+- [Open-Source Components & License Audits](file:///c:/Users/LOKESH/java%20project%202026/docs/OPEN_SOURCE_REUSE.md) — Reuse analysis for `pothole-reporter`, Leaflet, MapLibre GL, OSRM, Nominatim, and YOLO11s.
+- [Camera & GPS Verification Protocol](file:///c:/Users/LOKESH/java%20project%202026/docs/CAMERA_GPS_VERIFICATION.md) — Real sensor acquisition, noise filtering, and 10-step outdoor Android checklist.
+- [Statutory Complaint Submission Workflow](file:///c:/Users/LOKESH/java%20project%202026/docs/COMPLAINT_SUBMISSION_WORKFLOW.md) — Section 133 CrPC / IRC:82-2015 grounds, evidence dossier, and citizen assisted handoff.
+- [System Status & Verification Audit Report](file:///c:/Users/LOKESH/java%20project%202026/PROJECT_STATUS.md) — Full verification matrix, benchmark metrics, and browser automation test results.
 
 ---
 
 ## Running RoadGuard AI Locally
 
 ### Prerequisites
-* **Java 21+** (Tested with Java 26.0.1 HotSpot 64-Bit)
-* **Node.js 18+** (Tested with Node.js v24)
-* **Microsoft Edge** or **Google Chrome** (for browser testing)
+
+- **Java 21+** (Tested with Java 26.0.1 HotSpot 64-Bit)
+- **Node.js 18+** (Tested with Node.js v24)
+- **Microsoft Edge** or **Google Chrome** (for browser testing)
 
 ### 1. Start the Java Spring Boot Backend (Port 8080)
+
 ```powershell
 cd "c:\Users\LOKESH\java project 2026\roadguard-backend"
 $env:JAVA_HOME = "C:\Program Files\Java\jdk-26.0.1"
 .\mvnw.cmd spring-boot:run
 ```
-* Health Endpoint: `http://localhost:8080/api/v1/health`
-* H2 Database Console: `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:roadguarddb`, User: `sa`, Password: empty)
+
+- Health Endpoint: `http://localhost:8080/api/v1/health`
+- H2 Database Console: `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:roadguarddb`, User: `sa`, Password: empty)
 
 ### 2. Start the React + Vite Frontend (Port 5173)
+
 ```powershell
 cd "c:\Users\LOKESH\java project 2026\roadguard-frontend"
 npm run dev -- --host
 ```
-* Web Dashboard: `http://localhost:5173/`
+
+- Web Dashboard: `http://localhost:5173/`
 
 ### 3. Run Automated Test & Verification Suites
+
 ```powershell
 # A. Java Backend JUnit & Benchmark Tests
 cd "c:\Users\LOKESH\java project 2026\roadguard-backend"

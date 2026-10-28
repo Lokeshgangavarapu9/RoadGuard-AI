@@ -12,6 +12,7 @@
 This document establishes the verified technical specifications, jurisdictional boundaries, identity requirements, evidence standards, and permitted integration methodologies for official road-defect complaint destinations in India, specifically focusing on National Highways and Andhra Pradesh state/urban road networks.
 
 ### Non-Negotiable Integration Rules
+
 1. **No Fake APIs**: Never invent REST endpoints, OAuth flows, or automated submission protocols that are not publicly published and officially supported by the government authority.
 2. **No Bypassing Security**: Do not bypass CAPTCHA (BotDetect, reCAPTCHA), SMS OTPs, CSRF tokens, or WAF rate limits.
 3. **Transparent Truthful States**: A portal is marked `CONNECTED_VERIFIED` only if an active, authorized authenticated session/token has been verified. Otherwise, states such as `MANUAL_HANDOFF_ONLY`, `API_UNAVAILABLE`, `LOGIN_REQUIRED`, or `NOT_CONNECTED` must be explicitly declared.
@@ -113,6 +114,7 @@ This document establishes the verified technical specifications, jurisdictional 
 ```
 
 ### Destination Selection Logic
+
 1. **If road contains `NH-` or matches NHAI highway database**:
    - Authority: `NHAI`
    - Portal: **Rajmargyatra**

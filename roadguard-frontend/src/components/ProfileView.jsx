@@ -183,8 +183,8 @@ export default function ProfileView({ onProfileUpdated, onNavigateToIssues }) {
       setPortals((prev) => prev.map((p) => ((p.portalId || p.id) === portalId ? updated : p)));
       setPortalNotice({
         portalId,
-        title: 'Status Verified & Retained',
-        message: updated.connectionNotes || 'Status refreshed from verified portal configuration.'
+        title: 'Portal Config Refreshed',
+        message: updated.connectionNotes || 'Portal configuration refreshed from local settings (citizen OTP/CAPTCHA handoff required for official submission).'
       });
     } catch (err) {
       console.error('Failed to refresh portal status:', err);
