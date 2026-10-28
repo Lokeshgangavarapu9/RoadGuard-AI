@@ -7,6 +7,7 @@ import {
   VideoOff,
   ShieldAlert,
   AlertCircle,
+  AlertTriangle,
   Cpu,
   Square,
   Play
@@ -53,7 +54,8 @@ export default function CameraViewfinder({
   settings = {},
   onEligibilityChange,
   cameraState: externalCameraState,
-  onCameraStateChange
+  onCameraStateChange,
+  onFileGrievance
 }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -94,6 +96,7 @@ export default function CameraViewfinder({
   const [lastInferenceStatus, setLastInferenceStatus] = useState(null);
   const [_lastUploadedFrame, setLastUploadedFrame] = useState(null);
   const [frameCount, setFrameCount] = useState(0);
+  const [capturedScreenshots, setCapturedScreenshots] = useState([]);
 
   const frameIntervalSec = settings.frameInterval || 2.8;
 
@@ -313,8 +316,8 @@ export default function CameraViewfinder({
 
   // 5. Live Frame Capture & Real ONNX Inference Loop
   useEffect(() => {
-    // Only capture frames when driving mode is active AND camera is RUNNING
-    if (!isJourneyActive || !journeyId || lifecycleState !== 'RUNNING') {
+    // Only capture frames when camera is RUNNING (supports both active journey and standalone quick scan)
+    if (lifecycleState !== 'RUNNING') {
       return;
     }
 
@@ -384,7 +387,7 @@ export default function CameraViewfinder({
         const sanitizedLon = (hasValidCoords && !isStale && isAccurate) ? rawLon : null;
 
         // Upload genuine frame to backend ONNX pipeline with verified telemetry
-        const resp = await uploadEvidenceFrame(journeyId, file, {
+        const resp = await uploadEvidenceFrame(journeyId || null, file, {
           latitude: sanitizedLat,
           longitude: sanitizedLon,
           capturedAt: new Date().toISOString(),
@@ -409,6 +412,30 @@ export default function CameraViewfinder({
           const topDet = resp.observations[0];
           const defectFormatted = formatDefectName(topDet.rawClassLabel);
           const confPercent = ((topDet.rawConfidence || 0) * 100).toFixed(0);
+
+          let thumbUrl = null;
+          try {
+            thumbUrl = canvas.toDataURL('image/jpeg', 0.6);
+          } catch (thumbErr) {
+            console.debug('Failed to generate frame thumbnail:', thumbErr);
+          }
+
+          if (thumbUrl) {
+            setCapturedScreenshots((prev) => [
+              {
+                id: Date.now() + Math.random(),
+                url: thumbUrl,
+                timestamp: new Date().toLocaleTimeString(),
+                label: defectFormatted,
+                confidence: confPercent,
+                seq: currentSeq,
+                observation: topDet,
+                latitude: sanitizedLat,
+                longitude: sanitizedLon
+              },
+              ...prev
+            ].slice(0, 8));
+          }
 
           setDetectedBox({
             type: topDet.rawClassLabel,
@@ -446,7 +473,7 @@ export default function CameraViewfinder({
     }, frameIntervalSec * 1000);
 
     return () => clearInterval(interval);
-  }, [isJourneyActive, journeyId, lifecycleState, frameIntervalSec, onFrameProcessed, onNewDetection]);
+  }, [journeyId, lifecycleState, frameIntervalSec, onFrameProcessed, onNewDetection]);
 
   // Genuine GPS telemetry formatted for HUD chips
   const hasGenuineGps = currentLocation?.speed != null;
@@ -634,35 +661,60 @@ export default function CameraViewfinder({
 
       {/* 3. Real ONNX Detection Bounding Box Overlay */}
       {detectedBox && lifecycleState === 'RUNNING' && (
-        <div style={{
-          position: 'absolute',
-          top: detectedBox.y1 != null ? `${(detectedBox.y1 * 100).toFixed(1)}%` : '35%',
-          left: detectedBox.x1 != null ? `${(detectedBox.x1 * 100).toFixed(1)}%` : '30%',
-          width: (detectedBox.x2 != null && detectedBox.x1 != null) ? `${Math.max(14, (detectedBox.x2 - detectedBox.x1) * 100).toFixed(1)}%` : '40%',
-          height: (detectedBox.y2 != null && detectedBox.y1 != null) ? `${Math.max(12, (detectedBox.y2 - detectedBox.y1) * 100).toFixed(1)}%` : '35%',
-          border: `2px solid ${detectedBox.type?.toLowerCase().includes('buraco') ? '#ff3366' : '#ffb703'}`,
-          backgroundColor: detectedBox.type?.toLowerCase().includes('buraco') ? 'rgba(255, 51, 102, 0.18)' : 'rgba(255, 183, 3, 0.18)',
-          borderRadius: '6px',
-          boxShadow: `0 0 15px ${detectedBox.type?.toLowerCase().includes('buraco') ? 'rgba(255, 51, 102, 0.6)' : 'rgba(255, 183, 3, 0.6)'}`,
-          pointerEvents: 'none',
-          zIndex: 40,
-          transition: 'all 0.12s ease'
-        }}>
-          <span style={{
+        <>
+          {/* Prominent Pulsing Alert Triangle Badge */}
+          <div style={{
             position: 'absolute',
-            top: '-24px',
-            left: '0',
-            backgroundColor: detectedBox.type?.toLowerCase().includes('buraco') ? '#ff3366' : '#ffb703',
+            top: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 60,
+            backgroundColor: 'rgba(239, 68, 68, 0.95)',
+            border: '2px solid #ffffff',
+            borderRadius: '30px',
+            padding: '6px 18px',
             color: '#ffffff',
-            fontSize: '11px',
-            fontWeight: 700,
-            padding: '2px 8px',
-            borderRadius: '4px',
-            whiteSpace: 'nowrap'
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontWeight: 800,
+            fontSize: '12px',
+            boxShadow: '0 0 25px rgba(239, 68, 68, 0.8)'
           }}>
-            {detectedBox.desc}
-          </span>
-        </div>
+            <AlertTriangle size={17} color="#ffffff" />
+            <span>ROAD DEFECT DETECTED: {detectedBox.desc?.replace('ONNX YOLO11s: ', '')}</span>
+          </div>
+
+          <div style={{
+            position: 'absolute',
+            top: detectedBox.y1 != null ? `${(detectedBox.y1 * 100).toFixed(1)}%` : '35%',
+            left: detectedBox.x1 != null ? `${(detectedBox.x1 * 100).toFixed(1)}%` : '30%',
+            width: (detectedBox.x2 != null && detectedBox.x1 != null) ? `${Math.max(14, (detectedBox.x2 - detectedBox.x1) * 100).toFixed(1)}%` : '40%',
+            height: (detectedBox.y2 != null && detectedBox.y1 != null) ? `${Math.max(12, (detectedBox.y2 - detectedBox.y1) * 100).toFixed(1)}%` : '35%',
+            border: `2px solid ${detectedBox.type?.toLowerCase().includes('buraco') ? '#ff3366' : '#ffb703'}`,
+            backgroundColor: detectedBox.type?.toLowerCase().includes('buraco') ? 'rgba(255, 51, 102, 0.18)' : 'rgba(255, 183, 3, 0.18)',
+            borderRadius: '6px',
+            boxShadow: `0 0 15px ${detectedBox.type?.toLowerCase().includes('buraco') ? 'rgba(255, 51, 102, 0.6)' : 'rgba(255, 183, 3, 0.6)'}`,
+            pointerEvents: 'none',
+            zIndex: 40,
+            transition: 'all 0.12s ease'
+          }}>
+            <span style={{
+              position: 'absolute',
+              top: '-24px',
+              left: '0',
+              backgroundColor: detectedBox.type?.toLowerCase().includes('buraco') ? '#ff3366' : '#ffb703',
+              color: '#ffffff',
+              fontSize: '11px',
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: '4px',
+              whiteSpace: 'nowrap'
+            }}>
+              {detectedBox.desc}
+            </span>
+          </div>
+        </>
       )}
 
       {/* 4. Top Left HUD Badge & Prominent Stop Camera Control */}
@@ -748,6 +800,99 @@ export default function CameraViewfinder({
           <span>{displayHeading}</span>
         </div>
       </div>
+
+      {/* Captured Pothole Screenshots Strip */}
+      {capturedScreenshots.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          bottom: '44px',
+          left: '12px',
+          right: '12px',
+          zIndex: 55,
+          background: 'rgba(5, 8, 16, 0.88)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRadius: '8px',
+          padding: '8px 10px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Camera size={13} color="#00f5a0" /> Captured Defects ({capturedScreenshots.length})
+            </span>
+            <span style={{ fontSize: '10px', color: '#94a3b8' }}>Real-time ONNX Evidence</span>
+          </div>
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            overflowX: 'auto',
+            paddingBottom: '2px'
+          }}>
+            {capturedScreenshots.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  position: 'relative',
+                  flexShrink: 0,
+                  width: '94px',
+                  borderRadius: '6px',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255, 51, 102, 0.45)',
+                  backgroundColor: '#000'
+                }}
+              >
+                <img
+                  src={item.url}
+                  alt={item.label}
+                  style={{ width: '100%', height: '54px', objectFit: 'cover', display: 'block' }}
+                />
+                <div style={{
+                  padding: '3px 4px',
+                  fontSize: '9px',
+                  color: '#cbd5e1',
+                  background: 'rgba(0,0,0,0.75)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px'
+                }}>
+                  <div style={{ color: '#ff3366', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {item.label} ({item.confidence}%)
+                  </div>
+                  {onFileGrievance && (
+                    <button
+                      type="button"
+                      onClick={() => onFileGrievance({
+                        id: 'cam-' + item.id,
+                        defectClass: item.label?.toUpperCase().replace(' ', '_'),
+                        defectType: item.label,
+                        latitude: item.latitude,
+                        longitude: item.longitude,
+                        evidencePhotoUrl: item.url,
+                        confidenceScore: Number(item.confidence) / 100
+                      })}
+                      style={{
+                        background: '#38bdf8',
+                        border: 'none',
+                        borderRadius: '3px',
+                        color: '#000',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        padding: '2px 4px',
+                        cursor: 'pointer',
+                        marginTop: '2px'
+                      }}
+                    >
+                      File Grievance
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 6. Bottom Center: Real Inference Status Banner */}
       <div style={{

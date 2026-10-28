@@ -69,6 +69,7 @@ export default function App() {
 
   // Telemetry & Geospatial Data (genuine device sensor readings, initialized to null prior to genuine fix)
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [manualLocation, setManualLocation] = useState(null);
   const [isGpsEnabled, setIsGpsEnabled] = useState(false);
   const [gpsStatus, setGpsStatus] = useState('GPS OFF'); // 'GPS OFF' | 'GPS CONNECTING' | 'GPS ACTIVE' | 'GPS ERROR' | 'GPS PERMISSION DENIED'
   const [lastGpsFixTime, setLastGpsFixTime] = useState(null);
@@ -233,9 +234,13 @@ export default function App() {
             return;
           }
 
-          // Quality Gate 3: Reject coarse fixes (>50m accuracy)
+          // Quality Gate 3: Reject coarse fixes (>50m accuracy) and coarse cell-tower degradation
           if (accuracy > 50) {
             console.warn('Ignored coarse GPS fix:', accuracy, 'm accuracy');
+            return;
+          }
+          if (currentLocationRef.current?.accuracy <= 25 && accuracy > 35 && (timestamp - currentLocationRef.current.timestamp) < 15000) {
+            console.warn('Ignored coarse cell-tower degradation:', accuracy, 'm vs previous', currentLocationRef.current.accuracy, 'm');
             return;
           }
 
@@ -1140,12 +1145,13 @@ export default function App() {
                   <CameraViewfinder
                     isJourneyActive={activeJourney != null}
                     journeyId={activeJourney?.id}
-                    currentLocation={currentLocation}
+                    currentLocation={currentLocation || manualLocation}
                     onNewDetection={handleRefreshAll}
                     settings={settings}
                     onEligibilityChange={(state) => setRecordingStatus(state)}
                     cameraState={cameraState}
                     onCameraStateChange={setCameraState}
+                    onFileGrievance={(issue) => setSelectedIssue(issue)}
                   />
                 </div>
               </div>
@@ -1168,6 +1174,8 @@ export default function App() {
                   <MapViewer
                     currentLocation={currentLocation}
                     isGpsEnabled={isGpsEnabled}
+                    manualLocation={manualLocation}
+                    onManualPinSelect={(pin) => setManualLocation(pin)}
                     path={gpsPath}
                     issues={issues}
                     onSelectIssue={(issue) => setSelectedIssue(issue)}

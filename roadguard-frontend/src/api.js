@@ -21,14 +21,32 @@ const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api/v1` : '/api/v1';
 export const DEFAULT_TIMEOUT_MS = 15000;
 
 /**
- * Universal fetch wrapper with AbortController timeout protection (15s default).
+ * Universal fetch wrapper with AbortController timeout protection (15s default)
+ * and automatic X-Session-ID propagation for multi-user isolation.
  */
 export async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  const headers = new Headers(options.headers || {});
+  if (typeof window !== 'undefined') {
+    let sessionId = null;
+    try {
+      sessionId = localStorage.getItem('roadguard_session_id');
+      if (!sessionId) {
+        sessionId = 'sess_' + Math.random().toString(36).substring(2, 12);
+        localStorage.setItem('roadguard_session_id', sessionId);
+      }
+    } catch (_) {}
+    if (sessionId && !headers.has('X-Session-ID')) {
+      headers.set('X-Session-ID', sessionId);
+    }
+  }
+
   try {
     const res = await fetch(url, {
       ...options,
+      headers,
       signal: options.signal || controller.signal,
     });
     return res;
@@ -169,7 +187,7 @@ export async function getJourneyGps(journeyId) {
 export async function uploadEvidenceFrame(
   journeyId,
   file,
-  { latitude, longitude, capturedAt, frameSequence, gpsAccuracy, heading, speed, clientSha256 } = {}
+  { latitude, longitude, capturedAt, frameSequence, gpsAccuracy, accuracy, heading, speed, clientSha256, sha256 } = {}
 ) {
   const formData = new FormData();
   formData.append('file', file);
@@ -177,12 +195,26 @@ export async function uploadEvidenceFrame(
   if (longitude != null) formData.append('longitude', longitude);
   if (capturedAt) formData.append('capturedAt', capturedAt);
   if (frameSequence != null) formData.append('frameSequence', frameSequence);
-  if (gpsAccuracy != null) formData.append('gpsAccuracy', gpsAccuracy);
+
+  // Send both accuracy and gpsAccuracy to avoid Spring Boot parameter mismatch
+  const effectiveAcc = accuracy != null ? accuracy : gpsAccuracy;
+  if (effectiveAcc != null) {
+    formData.append('gpsAccuracy', effectiveAcc);
+    formData.append('accuracy', effectiveAcc);
+  }
+
   if (heading != null) formData.append('heading', heading);
   if (speed != null) formData.append('speed', speed);
-  if (clientSha256) formData.append('clientSha256', clientSha256);
 
-  const res = await fetchWithTimeout(`${API_BASE}/journeys/${journeyId}/frames`, {
+  // Send both sha256 and clientSha256
+  const effectiveHash = sha256 || clientSha256;
+  if (effectiveHash) {
+    formData.append('clientSha256', effectiveHash);
+    formData.append('sha256', effectiveHash);
+  }
+
+  const endpoint = journeyId ? `${API_BASE}/journeys/${journeyId}/frames` : `${API_BASE}/journeys/quick-scan-frame`;
+  const res = await fetchWithTimeout(endpoint, {
     method: 'POST',
     body: formData,
   }, 20000); // 20s for multipart upload
@@ -192,6 +224,10 @@ export async function uploadEvidenceFrame(
     frame.storageUrl = getAssetUrl(frame.storageUrl);
   }
   return frame;
+}
+
+export async function uploadQuickScanFrame(file, metadata = {}) {
+  return uploadEvidenceFrame(null, file, metadata);
 }
 
 export async function getJourneyFrames(journeyId) {

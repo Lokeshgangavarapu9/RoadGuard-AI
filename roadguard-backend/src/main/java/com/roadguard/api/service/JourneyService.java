@@ -230,6 +230,37 @@ public class JourneyService {
         return EvidenceFrameResponse.fromEntity(savedFrame, observations);
     }
 
+    @Transactional
+    public Journey getOrCreateQuickScanJourney() {
+        return journeyRepository.findAll().stream()
+            .filter(j -> "Quick Scan Inspection".equals(j.getRiderName()))
+            .findFirst()
+            .orElseGet(() -> {
+                Journey j = new Journey();
+                j.setUuid(UUID.randomUUID().toString());
+                j.setRiderName("Quick Scan Inspection");
+                j.setVehicleType(Journey.VehicleType.CAR);
+                j.setStatus(Journey.JourneyStatus.ACTIVE);
+                return journeyRepository.save(j);
+            });
+    }
+
+    @Transactional
+    public EvidenceFrameResponse uploadQuickScanFrame(
+        MultipartFile file,
+        Double latitude,
+        Double longitude,
+        Instant capturedAt,
+        Integer frameSequence,
+        Double accuracy,
+        Double heading,
+        Double speed,
+        String clientSha256
+    ) throws IOException {
+        Journey journey = getOrCreateQuickScanJourney();
+        return uploadEvidenceFrame(journey.getId(), file, latitude, longitude, capturedAt, frameSequence, accuracy, heading, speed, clientSha256);
+    }
+
     public List<JourneyResponse> getAllJourneys() {
         return journeyRepository.findAllByOrderByCreatedAtDesc().stream()
             .map(j -> {

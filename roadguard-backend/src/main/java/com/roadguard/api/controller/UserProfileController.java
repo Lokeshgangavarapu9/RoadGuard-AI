@@ -20,13 +20,16 @@ public class UserProfileController {
     }
 
     @GetMapping
-    public ResponseEntity<UserProfile> getProfile() {
-        return ResponseEntity.ok(profileService.getProfile());
+    public ResponseEntity<UserProfile> getProfile(
+            @RequestHeader(value = "X-Session-ID", required = false) String sessionId) {
+        return ResponseEntity.ok(profileService.getProfile(sessionId));
     }
 
     @PutMapping
-    public ResponseEntity<UserProfile> updateProfile(@RequestBody UserProfile request) {
-        return ResponseEntity.ok(profileService.updateProfile(request));
+    public ResponseEntity<UserProfile> updateProfile(
+            @RequestHeader(value = "X-Session-ID", required = false) String sessionId,
+            @RequestBody UserProfile request) {
+        return ResponseEntity.ok(profileService.updateProfile(sessionId, request));
     }
 
     @GetMapping("/readiness")
