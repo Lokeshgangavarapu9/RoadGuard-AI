@@ -311,7 +311,7 @@ export default function JourneysAndIssuesHub({
           top: '72px',
           right: '20px',
           zIndex: 1000,
-          background: '#1e3a8a',
+          background: '#102a43',
           color: '#ffffff',
           padding: '10px 18px',
           borderRadius: '10px',
@@ -343,7 +343,7 @@ export default function JourneysAndIssuesHub({
       }}>
         <div>
           <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#4f46e5' }}>📍</span> Journeys & Road Issues
+            <span style={{ color: '#243b53' }}>📍</span> Journeys & Road Issues
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
             Unified inspection hub: review route telemetry dossiers, 2D/3D map trails, and all detected road defects.
@@ -371,7 +371,7 @@ export default function JourneysAndIssuesHub({
               alignItems: 'center',
               gap: '6px',
               background: activeTab === 'journeys' && !inspectingId ? '#ffffff' : 'transparent',
-              color: activeTab === 'journeys' && !inspectingId ? '#4f46e5' : '#64748b',
+              color: activeTab === 'journeys' && !inspectingId ? '#243b53' : '#64748b',
               boxShadow: activeTab === 'journeys' && !inspectingId ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
               transition: 'all 0.15s ease'
             }}
@@ -391,7 +391,7 @@ export default function JourneysAndIssuesHub({
               alignItems: 'center',
               gap: '6px',
               background: activeTab === 'defects' ? '#ffffff' : 'transparent',
-              color: activeTab === 'defects' ? '#4f46e5' : '#64748b',
+              color: activeTab === 'defects' ? '#243b53' : '#64748b',
               boxShadow: activeTab === 'defects' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
               transition: 'all 0.15s ease'
             }}
@@ -468,7 +468,7 @@ export default function JourneysAndIssuesHub({
                     border: 'none',
                     cursor: 'pointer',
                     background: viewDimension === '3D' ? '#ffffff' : 'transparent',
-                    color: viewDimension === '3D' ? '#4f46e5' : '#64748b',
+                    color: viewDimension === '3D' ? '#243b53' : '#64748b',
                     boxShadow: viewDimension === '3D' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'
                   }}
                 >
@@ -484,7 +484,7 @@ export default function JourneysAndIssuesHub({
                   alignItems: 'center',
                   gap: '6px',
                   padding: '7px 14px',
-                  background: '#1e3a8a',
+                  background: '#102a43',
                   border: 'none',
                   borderRadius: '8px',
                   color: '#ffffff',
@@ -500,7 +500,7 @@ export default function JourneysAndIssuesHub({
 
           {isLoadingInspection ? (
             <div style={{ padding: '60px', textAlign: 'center', background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-              <RefreshCw size={28} className="spin" color="#4f46e5" style={{ margin: '0 auto 10px' }} />
+              <RefreshCw size={28} className="spin" color="#243b53" style={{ margin: '0 auto 10px' }} />
               <p style={{ color: '#64748b', fontSize: '14px' }}>Loading route coordinates & defect evidence...</p>
             </div>
           ) : (
@@ -518,7 +518,28 @@ export default function JourneysAndIssuesHub({
 
                 <div style={{ flex: 1, minHeight: '400px', position: 'relative' }}>
                   {viewDimension === '3D' ? (
-                    <div ref={maplibreglContainerRef} style={{ width: '100%', height: '100%', minHeight: '400px' }} />
+                    gpsPoints.filter(p => isValidCoordinate(p.latitude, p.longitude)).length < 2 ? (
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: '100%',
+                        minHeight: '400px',
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        background: '#f8fafc',
+                        color: '#64748b'
+                      }}>
+                        <Box size={40} color="#94a3b8" style={{ marginBottom: '12px' }} />
+                        <h4 style={{ margin: '0 0 6px', color: '#102a43', fontSize: '15px', fontWeight: 800 }}>3D Route Trajectory Unavailable</h4>
+                        <p style={{ margin: 0, fontSize: '12px', maxWidth: '380px', lineHeight: 1.5 }}>
+                          Insufficient genuine GPS route points were recorded during this journey (Camera inference ran in GPS-independent mode). 3D lines are rendered strictly from real recorded coordinates.
+                        </p>
+                      </div>
+                    ) : (
+                      <div ref={maplibreglContainerRef} style={{ width: '100%', height: '100%', minHeight: '400px' }} />
+                    )
                   ) : (
                     <MapContainer
                       center={gpsPoints.length > 0 && isValidCoordinate(gpsPoints[0].latitude, gpsPoints[0].longitude) ? [gpsPoints[0].latitude, gpsPoints[0].longitude] : [16.5062, 80.6480]}
@@ -659,7 +680,7 @@ export default function JourneysAndIssuesHub({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {journeys.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', color: '#64748b' }}>
-              <Car size={44} color="#4f46e5" style={{ margin: '0 auto 12px' }} />
+              <Car size={44} color="#243b53" style={{ margin: '0 auto 12px' }} />
               <h3 style={{ color: '#0f172a', margin: '0 0 6px', fontSize: '16px' }}>No Inspection Journeys Recorded</h3>
               <p style={{ fontSize: '13px', maxWidth: '480px', margin: '0 auto' }}>
                 Mount your smartphone and click Start Driving Mode or Camera Scanner on the dashboard to automatically monitor roads and generate journey dossiers.
@@ -696,7 +717,7 @@ export default function JourneysAndIssuesHub({
                           height: '38px',
                           borderRadius: '8px',
                           background: '#eef2ff',
-                          color: '#4f46e5',
+                          color: '#243b53',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center'
@@ -763,7 +784,7 @@ export default function JourneysAndIssuesHub({
                           flex: 1,
                           padding: '8px 12px',
                           background: '#eef2ff',
-                          color: '#4f46e5',
+                          color: '#243b53',
                           border: '1px solid #c7d2fe',
                           borderRadius: '8px',
                           fontSize: '12px',

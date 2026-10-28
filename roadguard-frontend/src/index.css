@@ -1,41 +1,53 @@
 :root,
 [data-theme="daylight"] {
-  --bg-primary: #f8fafc;
+  /* Specification Palette from Technical Brief */
+  --color-navy: #102a43;
+  --color-slate: #243b53;
+  --color-neutral: #f5f7fa;
+  --color-teal: #14b8a6;
+  --color-map-blue: #38bdf8;
+  --color-warning-amber: #f59e0b;
+  --color-error-red: #ef4444;
+
+  --bg-primary: #f5f7fa;
   --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
+  --bg-tertiary: #f0f4f8;
   --bg-glass: rgba(255, 255, 255, 0.95);
   --bg-glass-card: #ffffff;
-  --border-subtle: #e2e8f0;
-  --border-glow: rgba(37, 99, 235, 0.25);
+  --border-subtle: #cbd5e1;
+  --border-glow: rgba(56, 189, 248, 0.3);
 
-  --header-bg: #1e3a8a;
+  --header-bg: #102a43;
   --header-text: #ffffff;
-  --header-subtext: #93c5fd;
+  --header-subtext: #9fb3c8;
 
-  --accent-scanner: #2563eb;
-  --accent-journeys: #4f46e5;
-  --accent-gov: #0d9488;
-  --accent-profile: #0284c7;
+  --accent-scanner: #38bdf8;
+  --accent-journeys: #243b53;
+  --accent-gov: #14b8a6;
+  --accent-profile: #38bdf8;
 
-  --accent-cyan: #0284c7;
-  --accent-cyan-glow: rgba(2, 132, 199, 0.2);
-  --accent-blue: #2563eb;
-  --accent-amber: #d97706;
-  --accent-amber-glow: rgba(217, 119, 6, 0.2);
-  --accent-red: #dc2626;
-  --accent-red-glow: rgba(220, 38, 38, 0.2);
-  --accent-purple: #4f46e5;
+  --accent-cyan: #38bdf8;
+  --accent-cyan-glow: rgba(56, 189, 248, 0.25);
+  --accent-blue: #38bdf8;
+  --accent-amber: #f59e0b;
+  --accent-amber-glow: rgba(245, 158, 11, 0.25);
+  --accent-red: #ef4444;
+  --accent-red-glow: rgba(239, 68, 68, 0.25);
+  --accent-teal: #14b8a6;
+  --accent-slate: #243b53;
+  --accent-navy: #102a43;
 
-  --text-main: #0f172a;
-  --text-muted: #475569;
-  --text-dim: #64748b;
+  /* Text Contrast - AA & AAA compliant */
+  --text-main: #102a43;
+  --text-muted: #243b53;
+  --text-dim: #627d98;
 
   --font-heading: 'Outfit', -apple-system, sans-serif;
   --font-body: 'Inter', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --shadow-lg: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
-  --shadow-glow: 0 0 15px rgba(37, 99, 235, 0.15);
+  --shadow-lg: 0 10px 25px -5px rgba(16, 42, 67, 0.08), 0 8px 10px -6px rgba(16, 42, 67, 0.04);
+  --shadow-glow: 0 0 15px rgba(56, 189, 248, 0.2);
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 20px;
@@ -43,38 +55,48 @@
 }
 
 [data-theme="dark"] {
+  --color-navy: #102a43;
+  --color-slate: #243b53;
+  --color-neutral: #0a101d;
+  --color-teal: #14b8a6;
+  --color-map-blue: #38bdf8;
+  --color-warning-amber: #f59e0b;
+  --color-error-red: #ef4444;
+
   --bg-primary: #080c14;
   --bg-secondary: #0f1523;
   --bg-tertiary: #172033;
   --bg-glass: rgba(15, 21, 35, 0.85);
-  --bg-glass-card: rgba(23, 32, 51, 0.65);
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(0, 245, 160, 0.3);
+  --bg-glass-card: rgba(23, 32, 51, 0.7);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-glow: rgba(56, 189, 248, 0.35);
 
-  --header-bg: #0f172a;
+  --header-bg: #090e17;
   --header-text: #f8fafc;
   --header-subtext: #94a3b8;
 
-  --accent-scanner: #00f5a0;
+  --accent-scanner: #38bdf8;
   --accent-journeys: #818cf8;
   --accent-gov: #14b8a6;
   --accent-profile: #38bdf8;
 
-  --accent-cyan: #00f5a0;
-  --accent-cyan-glow: rgba(0, 245, 160, 0.25);
-  --accent-blue: #00b4d8;
-  --accent-amber: #ffb703;
-  --accent-amber-glow: rgba(255, 183, 3, 0.25);
-  --accent-red: #ff3366;
-  --accent-red-glow: rgba(255, 51, 102, 0.25);
-  --accent-purple: #9d4edd;
+  --accent-cyan: #38bdf8;
+  --accent-cyan-glow: rgba(56, 189, 248, 0.3);
+  --accent-blue: #38bdf8;
+  --accent-amber: #f59e0b;
+  --accent-amber-glow: rgba(245, 158, 11, 0.3);
+  --accent-red: #ef4444;
+  --accent-red-glow: rgba(239, 68, 68, 0.3);
+  --accent-teal: #14b8a6;
+  --accent-slate: #64748b;
+  --accent-navy: #1e3a8a;
 
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
 
-  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px var(--accent-cyan-glow);
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 20px rgba(56, 189, 248, 0.25);
 }
 
 * {
@@ -116,7 +138,7 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--text-dim);
 }
 
-/* Utility Animations */
+/* Animations */
 @keyframes pulse-ring {
   0% { transform: scale(0.95); opacity: 0.8; }
   50% { transform: scale(1.15); opacity: 0.3; }
@@ -151,7 +173,7 @@ h1, h2, h3, h4, h5, h6 {
   animation: pulse-ring 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Glassmorphism / Card Styles */
+/* Panels & Cards */
 .glass-panel {
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
@@ -178,21 +200,21 @@ h1, h2, h3, h4, h5, h6 {
 /* HUD Telemetry Elements */
 .hud-chip {
   font-family: var(--font-mono);
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(16, 42, 67, 0.9);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.15);
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 0.75rem;
-  color: #38bdf8;
+  color: var(--color-map-blue);
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-/* Buttons */
+/* Primary Action Buttons */
 .btn-primary {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, var(--color-navy) 0%, var(--color-slate) 100%);
   color: #ffffff;
   font-weight: 700;
   font-family: var(--font-heading);
@@ -205,16 +227,16 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: center;
   gap: 8px;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 4px 15px rgba(16, 42, 67, 0.25);
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 25px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 6px 20px rgba(16, 42, 67, 0.35);
 }
 
 .btn-danger {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  background: linear-gradient(135deg, var(--color-error-red) 0%, #b91c1c 100%);
   color: #ffffff;
   font-weight: 700;
   font-family: var(--font-heading);
@@ -227,12 +249,12 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: center;
   gap: 8px;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.25);
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
 }
 
 .btn-danger:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 25px rgba(220, 38, 38, 0.4);
+  box-shadow: 0 6px 25px rgba(239, 68, 68, 0.4);
 }
 
 .btn-secondary {
@@ -250,7 +272,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .btn-secondary:hover {
-  background: var(--border-subtle);
+  background: #e2e8f0;
 }
 
 /* Leaflet theme customization */

@@ -18,6 +18,8 @@ import {
   Navigation,
   Undo2,
   Redo2,
+  ChevronLeft,
+  ChevronRight,
   UserCheck,
   Settings as SettingsIcon
 } from 'lucide-react';
@@ -44,22 +46,22 @@ import {
 } from './api';
 import { isValidCoordinate, haversineDistanceMeters } from './utils/geoUtils';
 
-// Section definition dictionary for the 4 consolidated hubs + settings
+// Section definition dictionary for RoadGuard AI desired product structure
 const SECTION_CONFIG = {
   scanner: {
     id: 'scanner',
-    title: 'Live Road Scanner',
-    shortTitle: 'Live Scanner',
+    title: 'Road Monitoring',
+    shortTitle: 'Monitoring',
     hash: '#scanner',
-    color: '#2563EB',
+    color: '#38bdf8', // Map blue #38BDF8
     icon: Activity
   },
   'journeys-issues': {
     id: 'journeys-issues',
-    title: 'Journeys & Road Issues',
-    shortTitle: 'Journeys & Issues',
+    title: 'Journey Reports',
+    shortTitle: 'Reports',
     hash: '#journeys-issues',
-    color: '#4F46E5',
+    color: '#243b53', // Slate #243B53
     icon: Car
   },
   'gov-reports': {
@@ -67,15 +69,15 @@ const SECTION_CONFIG = {
     title: 'Government Reports',
     shortTitle: 'Gov Reports',
     hash: '#gov-reports',
-    color: '#0D9488',
+    color: '#14b8a6', // Teal #14B8A6
     icon: FileText
   },
   profile: {
     id: 'profile',
-    title: 'Citizen Profile & Portals',
+    title: 'Profile & Connected Services',
     shortTitle: 'Profile',
     hash: '#profile',
-    color: '#0284C7',
+    color: '#38bdf8', // Map blue #38BDF8
     icon: UserCheck
   },
   settings: {
@@ -83,7 +85,7 @@ const SECTION_CONFIG = {
     title: 'Settings',
     shortTitle: 'Settings',
     hash: '#settings',
-    color: '#64748B',
+    color: '#243b53', // Slate #243B53
     icon: SettingsIcon
   }
 };
@@ -107,6 +109,7 @@ export default function App() {
   const [selectedReportId, setSelectedReportId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [undoableAction, setUndoableAction] = useState(null);
 
   // Synchronize browser history popstate / hashchange
   useEffect(() => {
@@ -800,62 +803,92 @@ export default function App() {
             <Menu size={20} />
           </button>
 
-          {/* Undo (← Back) and Redo (Forward →) buttons */}
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            background: 'rgba(0, 0, 0, 0.22)',
-            borderRadius: '8px',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            overflow: 'hidden'
-          }}>
+          {/* Section Navigation: History Back & Forward (shown when history exists) */}
+          {historyStack.length > 1 && (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'rgba(0, 0, 0, 0.25)',
+              borderRadius: '8px',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              overflow: 'hidden'
+            }}>
+              <button
+                onClick={handleUndo}
+                disabled={historyIndex <= 0}
+                aria-label="Navigate to previous section"
+                title="Go back to previous section"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: historyIndex > 0 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
+                  cursor: historyIndex > 0 ? 'pointer' : 'not-allowed',
+                  padding: '6px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11px',
+                  fontWeight: 600
+                }}
+              >
+                <ChevronLeft size={14} />
+                <span>Back</span>
+              </button>
+
+              <button
+                onClick={handleRedo}
+                disabled={historyIndex >= historyStack.length - 1}
+                aria-label="Navigate forward"
+                title="Go forward"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: historyIndex < historyStack.length - 1 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
+                  cursor: historyIndex < historyStack.length - 1 ? 'pointer' : 'not-allowed',
+                  padding: '6px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11px',
+                  fontWeight: 600
+                }}
+              >
+                <span>Forward</span>
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* Reversible Action Undo Button: Displayed strictly when a real reversible action exists */}
+          {undoableAction && (
             <button
-              onClick={handleUndo}
-              disabled={historyIndex <= 0}
-              aria-label="Undo navigation step back"
-              title="Go back to previous section (Undo)"
+              onClick={() => {
+                if (undoableAction && undoableAction.run) {
+                  undoableAction.run();
+                  setUndoableAction(null);
+                }
+              }}
+              aria-label="Undo last reversible action"
+              title="Undo last action"
               style={{
-                background: 'transparent',
-                border: 'none',
-                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
-                color: historyIndex > 0 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
-                cursor: historyIndex > 0 ? 'pointer' : 'not-allowed',
-                padding: '6px 10px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
+                background: 'rgba(239, 68, 68, 0.25)',
+                border: '1px solid #ef4444',
+                color: '#ffffff',
+                padding: '6px 12px',
+                borderRadius: '8px',
                 fontSize: '11px',
-                fontWeight: 600,
-                transition: 'all 0.15s ease'
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
               }}
             >
               <Undo2 size={13} />
-              <span>Back</span>
+              <span>Undo {undoableAction.label || 'Action'}</span>
             </button>
-
-            <button
-              onClick={handleRedo}
-              disabled={historyIndex >= historyStack.length - 1}
-              aria-label="Redo navigation step forward"
-              title="Go forward to next section (Redo)"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: historyIndex < historyStack.length - 1 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
-                cursor: historyIndex < historyStack.length - 1 ? 'pointer' : 'not-allowed',
-                padding: '6px 10px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '11px',
-                fontWeight: 600,
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <span>Forward</span>
-              <Redo2 size={13} />
-            </button>
-          </div>
+          )}
 
           {/* Brand Logo & Name */}
           <div
@@ -1466,19 +1499,42 @@ export default function App() {
                   <span style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <AlertTriangle size={15} color="#f59e0b" /> Recent Confirmed Road Defects ({issues.length})
                   </span>
-                  <button
-                    onClick={() => navigateTo('journeys-issues')}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#00f5a0',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    View All Issues &rarr;
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button
+                      onClick={() => {
+                        if (activeJourney) setSelectedReportId(activeJourney.id);
+                        navigateTo('journeys-issues');
+                      }}
+                      style={{
+                        background: 'rgba(56, 189, 248, 0.15)',
+                        border: '1px solid #38bdf8',
+                        color: '#38bdf8',
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <FileText size={12} /> View Journey Report &rarr;
+                    </button>
+                    <button
+                      onClick={() => navigateTo('journeys-issues')}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#38bdf8',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      All Issues &rarr;
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{
