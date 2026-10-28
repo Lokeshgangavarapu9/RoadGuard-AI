@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   User,
-  Shield,
   Car,
   Mail,
   Phone,
@@ -10,1297 +9,726 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
-  Lock,
-  FileText,
-  Building,
   Landmark,
+  Building,
   Save,
-  Check,
-  AlertTriangle,
-  Info,
-  Cpu,
-  Send,
-  Globe,
-  Sliders,
-  CheckSquare,
-  HelpCircle,
-  Sparkles
+  Trash2,
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
-import {
-  getUserProfile,
-  updateUserProfile,
-  getConnectedPortals,
-  refreshPortalStatus,
-  getWorkerStatus,
-  getProfileReadiness
-} from '../api';
+import { getUserProfile, updateUserProfile } from '../api';
+import { isValidCoordinate } from '../utils/geoUtils';
 
-export default function ProfileView({ onProfileUpdated, onNavigateToIssues }) {
-  const [activeTab, setActiveTab] = useState('personal'); // 'personal' | 'address' | 'preferences' | 'portals' | 'readiness'
+export default function ProfileView({
+  currentLocation = null,
+  onProfileUpdated = null
+}) {
   const [profile, setProfile] = useState({
     fullName: '',
     email: '',
     phoneNumber: '',
-    preferredLanguage: 'English',
-    mobileVerified: false,
-    emailVerified: false,
-    // Address & Jurisdiction
-    address: '',
+    primaryVrn: '',
+    vehicleType: 'CAR',
     state: 'Andhra Pradesh',
     district: '',
     cityOrMunicipality: '',
-    ulbName: '',
-    wardNumber: '',
-    locality: '',
-    pinCode: '',
-    // Vehicle info
-    primaryVrn: '',
-    vehicleType: 'CAR',
-    additionalVehicles: '',
-    // Complaint Preferences
-    preferredNotificationChannel: 'SMS',
-    consentDeviceLocation: true,
-    consentInspectionPhotos: true,
-    communicationPreferences: ''
+    pinCode: ''
   });
 
-  const [portals, setPortals] = useState([]);
-  const [readiness, setReadiness] = useState(null);
-  const [workerStatus, setWorkerStatus] = useState({ connected: false, activeWorkerCount: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [autoLocationBadge, setAutoLocationBadge] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [refreshingPortalId, setRefreshingPortalId] = useState(null);
-  const [portalNotice, setPortalNotice] = useState(null);
 
-  // Live VRN Normalization helper
-  function normalizeVrn(vrn) {
-    if (!vrn) return '';
-    return vrn.replace(/[\s\-_]/g, '').toUpperCase();
+  useEffect(() => {
+    let isMounted = true;
+    getUserProfile()
+      .then((data) => {
+        if (!isMounted || !data) return;
+        setProfile({
+          fullName: data.fullName || '',
+          email: data.email || '',
+          phoneNumber: data.phoneNumber || '',
+          primaryVrn: data.primaryVrn || '',
+          vehicleType: data.vehicleType || 'CAR',
+          state: data.state || 'Andhra Pradesh',
+          district: data.district || '',
+          cityOrMunicipality: data.cityOrMunicipality || '',
+          pinCode: data.pinCode || ''
+        });
+
+        if (data.cityOrMunicipality || data.district) {
+          setAutoLocationBadge({
+            city: data.cityOrMunicipality || 'Vijayawada',
+            district: data.district || 'NTR District',
+            state: data.state || 'Andhra Pradesh',
+            pinCode: data.pinCode || '520010',
+            jurisdiction: 'NHAI / VMC CDMA'
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load user profile:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+
+    return () => { isMounted = false; };
+  }, []);
+
+  // BookMyShow-Style Auto-Detect Location from Live GPS
+  async function handleAutoDetectLocation() {
+    setIsGeocoding(true);
+    setErrorMessage(null);
+
+    async function reverseGeocode(lat, lon) {
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&addressdetails=1`,
+          { headers: { 'User-Agent': 'RoadGuardAI/1.0 (roadguard-citizen-app)' } }
+        );
+        const data = await resp.json();
+        const addr = data.address || {};
+
+        const city = addr.city || addr.town || addr.village || addr.suburb || 'Vijayawada';
+        const district = addr.county || addr.state_district || 'NTR District';
+        const state = addr.state || 'Andhra Pradesh';
+        const pin = addr.postcode || '520010';
+        const road = addr.road || '';
+
+        let jurisdiction = 'VMC CDMA (Urban Local Body)';
+        if (/national\s*highway|nh\b/i.test(road)) {
+          jurisdiction = 'NHAI (National Highways Authority of India)';
+        } else if (/state\s*highway|sh\b|mdr\b/i.test(road)) {
+          jurisdiction = 'AP Roads & Buildings (State Highways)';
+        }
+
+        const badge = { city, district, state, pinCode: pin, jurisdiction };
+        setAutoLocationBadge(badge);
+
+        setProfile((prev) => ({
+          ...prev,
+          cityOrMunicipality: city,
+          district: district,
+          state: state,
+          pinCode: pin
+        }));
+
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2500);
+      } catch (e) {
+        console.warn('Reverse geocoding error:', e);
+        // Fallback for Andhra Pradesh corridor
+        setAutoLocationBadge({
+          city: 'Vijayawada',
+          district: 'NTR District',
+          state: 'Andhra Pradesh',
+          pinCode: '520010',
+          jurisdiction: 'NHAI / VMC CDMA'
+        });
+      } finally {
+        setIsGeocoding(false);
+      }
+    }
+
+    if (currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon)) {
+      await reverseGeocode(currentLocation.lat, currentLocation.lon);
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+        },
+        (err) => {
+          console.warn('Geolocation lookup failed:', err.message);
+          setIsGeocoding(false);
+          // Fallback location badge
+          setAutoLocationBadge({
+            city: 'Vijayawada',
+            district: 'NTR District',
+            state: 'Andhra Pradesh',
+            pinCode: '520010',
+            jurisdiction: 'NHAI / VMC CDMA'
+          });
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else {
+      setIsGeocoding(false);
+    }
   }
 
-  const normalizedVrn = normalizeVrn(profile.primaryVrn);
-  const isVrnValid = normalizedVrn.length === 0 || /^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$/.test(normalizedVrn);
-  const [copiedPortalId, setCopiedPortalId] = useState(null);
+  async function handleSaveProfile(e) {
+    e.preventDefault();
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    try {
+      const updated = await updateUserProfile(profile);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      if (onProfileUpdated) onProfileUpdated(updated);
+    } catch (err) {
+      console.error('Failed to save profile:', err);
+      setErrorMessage(err.message || 'Failed to update citizen profile.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   function handleClearForm() {
     setProfile({
       fullName: '',
       email: '',
       phoneNumber: '',
-      preferredLanguage: 'English',
-      mobileVerified: false,
-      emailVerified: false,
-      address: '',
+      primaryVrn: '',
+      vehicleType: 'CAR',
       state: 'Andhra Pradesh',
       district: '',
       cityOrMunicipality: '',
-      ulbName: '',
-      wardNumber: '',
-      locality: '',
-      pinCode: '',
-      primaryVrn: '',
-      vehicleType: 'CAR',
-      additionalVehicles: '',
-      preferredNotificationChannel: 'SMS',
-      consentDeviceLocation: true,
-      consentInspectionPhotos: true,
-      communicationPreferences: ''
+      pinCode: ''
     });
+    setAutoLocationBadge(null);
   }
 
-  function handleCopyCitizenData(portal) {
-    const text = [
-      `--- ROADGUARD CITIZEN DETAILS FOR ${(portal.portalName || 'OFFICIAL PORTAL').toUpperCase()} ---`,
-      `Full Name: ${profile.fullName || 'N/A'}`,
-      `Mobile Phone: ${profile.phoneNumber || profile.phone || 'N/A'}`,
-      `Email: ${profile.email || 'N/A'}`,
-      `Vehicle Reg No (VRN): ${profile.primaryVrn || 'N/A'}`,
-      `Vehicle Type: ${profile.vehicleType || 'CAR'}`,
-      `State: ${profile.state || 'Andhra Pradesh'}`,
-      `District: ${profile.district || 'N/A'}`,
-      `City/ULB: ${profile.cityOrMunicipality || profile.ulbName || 'N/A'}`,
-      `Ward: ${profile.wardNumber || 'N/A'}`,
-      `PIN Code: ${profile.pinCode || 'N/A'}`,
-      `Address: ${profile.address || 'N/A'}`
-    ].join('\n');
-
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-      const pId = portal.portalId || portal.id;
-      setCopiedPortalId(pId);
-      setTimeout(() => setCopiedPortalId(null), 3000);
-    }
-  }
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const [profileData, portalsData, wStatus, readData] = await Promise.all([
-        getUserProfile(),
-        getConnectedPortals().catch(() => []),
-        getWorkerStatus().catch(() => ({ connected: false, activeWorkerCount: 0 })),
-        getProfileReadiness().catch(() => null)
-      ]);
-
-      setWorkerStatus(wStatus);
-      if (readData) setReadiness(readData);
-
-      if (profileData) {
-        // Anti-mock guard: Ensure new/unregistered users never receive fabricated demo details
-        const isLegacyDemo =
-          profileData.email === 'lokesh.citizen@roadguard.local' ||
-          (profileData.fullName === 'Lokesh Kumar' && (profileData.primaryVrn === 'AP 16 AB 1234' || profileData.primaryVrnNormalized === 'AP16AB1234')) ||
-          profileData.phone === '+91 98765 43210';
-
-        if (!isLegacyDemo && (profileData.fullName || profileData.email)) {
-          setProfile({
-            fullName: profileData.fullName || '',
-            email: profileData.email || '',
-            phoneNumber: profileData.phoneNumber || profileData.phone || '',
-            preferredLanguage: profileData.preferredLanguage || 'English',
-            mobileVerified: Boolean(profileData.mobileVerified),
-            emailVerified: Boolean(profileData.emailVerified),
-            address: profileData.address || '',
-            state: profileData.state || 'Andhra Pradesh',
-            district: profileData.district || '',
-            cityOrMunicipality: profileData.cityOrMunicipality || '',
-            ulbName: profileData.ulbName || '',
-            wardNumber: profileData.wardNumber || '',
-            locality: profileData.locality || '',
-            pinCode: profileData.pinCode || '',
-            primaryVrn: profileData.primaryVrn || '',
-            vehicleType: profileData.vehicleType || 'CAR',
-            additionalVehicles: profileData.additionalVehicles || '',
-            preferredNotificationChannel: profileData.preferredNotificationChannel || 'SMS',
-            consentDeviceLocation: profileData.consentDeviceLocation !== false,
-            consentInspectionPhotos: profileData.consentInspectionPhotos !== false,
-            communicationPreferences: profileData.communicationPreferences || ''
-          });
-        }
-      }
-
-      if (portalsData && Array.isArray(portalsData)) {
-        setPortals(portalsData);
-      }
-    } catch (err) {
-      console.error('Failed to load profile or portal data:', err);
-      setErrorMessage(err.message || 'Could not load profile from cloud backend.');
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleSave(e) {
-    if (e) e.preventDefault();
-    setIsSaving(true);
-    setErrorMessage(null);
-    setSaveSuccess(false);
-
-    try {
-      const payload = {
-        ...profile,
-        phone: (profile.phoneNumber || profile.phone || '').trim(),
-        phoneNumber: (profile.phoneNumber || profile.phone || '').trim()
-      };
-      const updated = await updateUserProfile(payload);
-      setSaveSuccess(true);
-      if (onProfileUpdated) onProfileUpdated(updated);
-
-      // Refresh readiness evaluation after update
-      const updatedReadiness = await getProfileReadiness().catch(() => null);
-      if (updatedReadiness) setReadiness(updatedReadiness);
-
-      setTimeout(() => setSaveSuccess(false), 4000);
-    } catch (err) {
-      console.error('Failed to update profile:', err);
-      setErrorMessage(err.message || 'Failed to save profile. Ensure backend is running.');
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleRefreshPortal(portalId) {
-    setRefreshingPortalId(portalId);
-    setPortalNotice(null);
-    try {
-      const updated = await refreshPortalStatus(portalId);
-      setPortals((prev) => prev.map((p) => ((p.portalId || p.id) === portalId ? updated : p)));
-      setPortalNotice({
-        portalId,
-        title: 'Portal Config Refreshed',
-        message: updated.connectionNotes || 'Portal configuration refreshed from local settings (citizen OTP/CAPTCHA handoff required for official submission).'
-      });
-    } catch (err) {
-      console.error('Failed to refresh portal status:', err);
-      setPortalNotice({
-        portalId,
-        title: 'Verification Failed',
-        message: 'Could not contact backend to verify portal service status.'
-      });
-    } finally {
-      setRefreshingPortalId(null);
-    }
+  if (isLoading) {
+    return (
+      <div style={{ padding: '60px', textAlign: 'center', background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+        <RefreshCw size={32} className="spin" color="#0284c7" style={{ margin: '0 auto 12px' }} />
+        <p style={{ color: '#64748b', fontSize: '14px' }}>Loading Citizen Profile & Portals...</p>
+      </div>
+    );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Top Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
+      {/* Top Header Card */}
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '14px',
+        padding: '20px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '16px'
+      }}>
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
-            Citizen Profile &amp; Connected Government Portals
-          </h2>
-          <p style={{ fontSize: '13px', color: '#94a3b8', margin: '4px 0 0' }}>
-            Maintain contact, jurisdiction and complaint preferences required for autonomous road-damage filing.
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              display: 'inline-flex',
+              padding: '6px',
+              borderRadius: '8px',
+              background: '#f0f9ff',
+              color: '#0284c7'
+            }}>
+              <User size={20} />
+            </span>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              Citizen Profile & Official Portals
+            </h2>
+          </div>
+          <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
+            Manage your citizen identity, vehicle details, and auto-detect your road jurisdiction for 1-click grievance filing.
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div style={{
-          display: 'flex',
-          backgroundColor: '#090d16',
-          padding: '4px',
-          borderRadius: '10px',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          flexWrap: 'wrap',
-          gap: '4px'
-        }}>
-          {[
-            { id: 'personal', label: 'Personal Info', icon: User },
-            { id: 'address', label: 'Address & Jurisdiction', icon: MapPin },
-            { id: 'preferences', label: 'Complaint Preferences', icon: Sliders },
-            { id: 'portals', label: 'Connected Portals', icon: Landmark },
-            { id: 'readiness', label: 'Profile Readiness', icon: CheckSquare }
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 12px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  border: 'none',
-                  cursor: 'pointer',
-                  backgroundColor: isActive ? '#1e293b' : 'transparent',
-                  color: isActive ? '#00f5a0' : '#94a3b8',
-                  boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.4)' : 'none',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Icon size={14} /> {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        {saveSuccess && (
+          <div style={{
+            background: '#ecfdf5',
+            border: '1px solid #a7f3d0',
+            color: '#059669',
+            padding: '6px 14px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            <CheckCircle2 size={15} /> Profile Saved Successfully
+          </div>
+        )}
       </div>
-
-      {/* Global Status Notifications */}
-      {saveSuccess && (
-        <div style={{
-          padding: '12px 16px',
-          backgroundColor: 'rgba(16, 185, 129, 0.15)',
-          border: '1px solid #10b981',
-          borderRadius: '10px',
-          color: '#34d399',
-          fontSize: '13px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <Check size={16} /> Citizen profile changes saved and synced successfully!
-        </div>
-      )}
 
       {errorMessage && (
         <div style={{
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          color: '#dc2626',
           padding: '12px 16px',
-          backgroundColor: 'rgba(239, 68, 68, 0.15)',
-          border: '1px solid #ef4444',
           borderRadius: '10px',
-          color: '#f87171',
           fontSize: '13px',
           display: 'flex',
           alignItems: 'center',
           gap: '8px'
         }}>
-          <AlertTriangle size={16} /> {errorMessage}
+          <AlertCircle size={16} />
+          {errorMessage}
         </div>
       )}
 
-      {isLoading ? (
-        <div className="glass-panel" style={{ padding: '60px 20px', textAlign: 'center', color: '#94a3b8' }}>
-          <RefreshCw size={32} className="spin" color="#00f5a0" style={{ margin: '0 auto 12px' }} />
-          <p>Loading citizen profile and verified portal requirements...</p>
-        </div>
-      ) : (
-        <>
-          {/* ======================================================== */}
-          {/* SECTION A: MY PERSONAL INFORMATION                       */}
-          {/* ======================================================== */}
-          {activeTab === 'personal' && (
-            <div className="glass-card" style={{
-              backgroundColor: '#0f172a',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '14px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '20px'
-            }}>
+      {/* 2-Column Responsive Layout */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(320px, 1.25fr) minmax(280px, 0.95fr)',
+        gap: '20px'
+      }} className="profile-split-grid">
+
+        {/* LEFT COLUMN: Citizen & Vehicle Identity + BookMyShow Auto-Location */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '14px',
+          padding: '22px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px'
+        }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+            Citizen & Vehicle Information
+          </h3>
+
+          <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* 2-Column Grid for Personal Fields */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px', color: '#f8fafc' }}>
-                  Section A: Citizen Personal Information
-                </h3>
-                <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8' }}>
-                  Legitimate identity details used to author official complaint submissions under citizen representation.
-                </p>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Lokesh Gangavarapu"
+                  value={profile.fullName}
+                  onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    outline: 'none',
+                    background: '#f8fafc'
+                  }}
+                />
               </div>
 
-              <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
-                  {/* Full Legal Name */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      Full Legal Name <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="text"
-                        required
-                        value={profile.fullName}
-                        onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
-                        placeholder="e.g. Ramesh Varma"
-                        style={{
-                          width: '100%',
-                          padding: '10px 14px 10px 38px',
-                          backgroundColor: '#1e293b',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '8px',
-                          color: '#f8fafc',
-                          fontSize: '13px',
-                          outline: 'none',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                      <User size={16} color="#64748b" style={{ position: 'absolute', left: '12px', top: '12px' }} />
-                    </div>
-                  </div>
-
-                  {/* Mobile Number & Verification Badge */}
-                  <div>
-                    <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      <span>10-Digit Mobile Number <span style={{ color: '#ef4444' }}>*</span></span>
-                      <span style={{
-                        fontSize: '10px',
-                        padding: '1px 6px',
-                        borderRadius: '4px',
-                        backgroundColor: profile.mobileVerified ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                        color: profile.mobileVerified ? '#34d399' : '#fbbf24'
-                      }}>
-                        {profile.mobileVerified ? 'Verified via Portal' : 'Verified at Filing Time via OTP'}
-                      </span>
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="tel"
-                        required
-                        value={profile.phoneNumber}
-                        onChange={(e) => setProfile({ ...profile, phoneNumber: e.target.value })}
-                        placeholder="e.g. 9876543210"
-                        style={{
-                          width: '100%',
-                          padding: '10px 14px 10px 38px',
-                          backgroundColor: '#1e293b',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '8px',
-                          color: '#f8fafc',
-                          fontSize: '13px',
-                          outline: 'none',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                      <Phone size={16} color="#64748b" style={{ position: 'absolute', left: '12px', top: '12px' }} />
-                    </div>
-                    <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                      Mandatory for government portal SMS OTP logins (NHAI Rajmargyatra / AP CDMA).
-                    </span>
-                  </div>
-
-                  {/* Email Address */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      Email Address <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="email"
-                        required
-                        value={profile.email}
-                        onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                        placeholder="e.g. citizen@example.com"
-                        style={{
-                          width: '100%',
-                          padding: '10px 14px 10px 38px',
-                          backgroundColor: '#1e293b',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '8px',
-                          color: '#f8fafc',
-                          fontSize: '13px',
-                          outline: 'none',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                      <Mail size={16} color="#64748b" style={{ position: 'absolute', left: '12px', top: '12px' }} />
-                    </div>
-                  </div>
-
-                  {/* Preferred Language */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      Preferred Language
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <select
-                        value={profile.preferredLanguage}
-                        onChange={(e) => setProfile({ ...profile, preferredLanguage: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '10px 14px 10px 38px',
-                          backgroundColor: '#1e293b',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '8px',
-                          color: '#f8fafc',
-                          fontSize: '13px',
-                          outline: 'none',
-                          boxSizing: 'border-box'
-                        }}
-                      >
-                        <option value="English">English</option>
-                        <option value="Telugu">Telugu (తెలుగు)</option>
-                        <option value="Hindi">Hindi (हिन्दी)</option>
-                      </select>
-                      <Globe size={16} color="#64748b" style={{ position: 'absolute', left: '12px', top: '12px' }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Primary Vehicle Registration */}
-                <div style={{
-                  padding: '16px',
-                  backgroundColor: 'rgba(0,0,0,0.2)',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Car size={16} color="#00f5a0" />
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>
-                      Vehicle Identification (Optional for highway patrol telemetry)
-                    </span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                        Vehicle Registration Number (VRN)
-                      </label>
-                      <input
-                        type="text"
-                        value={profile.primaryVrn}
-                        onChange={(e) => setProfile({ ...profile, primaryVrn: e.target.value })}
-                        placeholder="e.g. AP 16 CD 5678"
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          backgroundColor: '#1e293b',
-                          border: `1px solid ${isVrnValid ? 'rgba(255, 255, 255, 0.1)' : '#ef4444'}`,
-                          borderRadius: '6px',
-                          color: '#f8fafc',
-                          fontSize: '12px',
-                          textTransform: 'uppercase',
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                        Vehicle Classification
-                      </label>
-                      <select
-                        value={profile.vehicleType}
-                        onChange={(e) => setProfile({ ...profile, vehicleType: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          backgroundColor: '#1e293b',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '6px',
-                          color: '#f8fafc',
-                          fontSize: '12px',
-                          boxSizing: 'border-box'
-                        }}
-                      >
-                        <option value="CAR">Passenger Car / SUV</option>
-                        <option value="MOTORCYCLE">Two-Wheeler / Motorcycle</option>
-                        <option value="AUTO_RICKSHAW">Three-Wheeler Auto</option>
-                        <option value="TRUCK">Commercial Truck / Bus</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="btn-primary"
-                    style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Personal Info'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearForm}
-                    className="btn-secondary"
-                    style={{ padding: '10px 16px', fontSize: '13px' }}
-                  >
-                    Clear Form
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* ======================================================== */}
-          {/* SECTION B: ADDRESS & JURISDICTION                        */}
-          {/* ======================================================== */}
-          {activeTab === 'address' && (
-            <div className="glass-card" style={{
-              backgroundColor: '#0f172a',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '14px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '20px'
-            }}>
               <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px', color: '#f8fafc' }}>
-                  Section B: Address and Civic Jurisdiction
-                </h3>
-                <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8' }}>
-                  Required by municipal grievance portals (e.g. AP CDMA / Puramithra) to map defects to statutory city wards.
-                </p>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  10-Digit Mobile Number
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={profile.phoneNumber}
+                  onChange={(e) => setProfile({ ...profile, phoneNumber: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    outline: 'none',
+                    background: '#f8fafc'
+                  }}
+                />
               </div>
-
-              {/* Informational isolation notice */}
-              <div style={{
-                padding: '12px 14px',
-                backgroundColor: 'rgba(56, 189, 248, 0.08)',
-                border: '1px solid rgba(56, 189, 248, 0.25)',
-                borderRadius: '8px',
-                fontSize: '12px',
-                color: '#cbd5e1',
-                lineHeight: 1.5,
-                display: 'flex',
-                gap: '10px'
-              }}>
-                <Info size={16} color="#38bdf8" style={{ flexShrink: 0, marginTop: '2px' }} />
-                <span>
-                  <strong>Jurisdiction Isolation:</strong> Residential addresses are maintained separately from detected road hazards. For highway defects, RoadGuard uses the actual GPS telemetry of the hazard, not your home address.
-                </span>
-              </div>
-
-              <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
-                  {/* State */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      State / UT
-                    </label>
-                    <input
-                      type="text"
-                      value={profile.state}
-                      onChange={(e) => setProfile({ ...profile, state: e.target.value })}
-                      placeholder="e.g. Andhra Pradesh"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#f8fafc',
-                        fontSize: '13px',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  {/* District */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      District
-                    </label>
-                    <input
-                      type="text"
-                      value={profile.district}
-                      onChange={(e) => setProfile({ ...profile, district: e.target.value })}
-                      placeholder="e.g. Krishna / NTR District"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#f8fafc',
-                        fontSize: '13px',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  {/* Municipality / Urban Local Body */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      City / Municipality / ULB <span style={{ color: '#00f5a0' }}>(Required for AP CDMA)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={profile.cityOrMunicipality}
-                      onChange={(e) => setProfile({ ...profile, cityOrMunicipality: e.target.value, ulbName: e.target.value })}
-                      placeholder="e.g. Vijayawada Municipal Corporation"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#f8fafc',
-                        fontSize: '13px',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  {/* Ward Number */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      Ward Number
-                    </label>
-                    <input
-                      type="text"
-                      value={profile.wardNumber}
-                      onChange={(e) => setProfile({ ...profile, wardNumber: e.target.value })}
-                      placeholder="e.g. Ward 12"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#f8fafc',
-                        fontSize: '13px',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  {/* Locality */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      Locality / Colony
-                    </label>
-                    <input
-                      type="text"
-                      value={profile.locality}
-                      onChange={(e) => setProfile({ ...profile, locality: e.target.value })}
-                      placeholder="e.g. Benz Circle"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#f8fafc',
-                        fontSize: '13px',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  {/* Postal PIN Code */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                      Postal PIN Code
-                    </label>
-                    <input
-                      type="text"
-                      value={profile.pinCode}
-                      onChange={(e) => setProfile({ ...profile, pinCode: e.target.value })}
-                      placeholder="e.g. 520010"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        color: '#f8fafc',
-                        fontSize: '13px',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Street / Postal Address */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                    Street / Residential Address (Optional postal contact)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={profile.address}
-                    onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                    placeholder="e.g. Door 4-12, Ring Road"
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      backgroundColor: '#1e293b',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
-                      fontSize: '13px',
-                      boxSizing: 'border-box',
-                      resize: 'vertical'
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="btn-primary"
-                    style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Address & Jurisdiction'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearForm}
-                    className="btn-secondary"
-                    style={{ padding: '10px 16px', fontSize: '13px' }}
-                  >
-                    Clear Form
-                  </button>
-                </div>
-              </form>
             </div>
-          )}
 
-          {/* ======================================================== */}
-          {/* SECTION C: COMPLAINT PREFERENCES                         */}
-          {/* ======================================================== */}
-          {activeTab === 'preferences' && (
-            <div className="glass-card" style={{
-              backgroundColor: '#0f172a',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '14px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '20px'
-            }}>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px', color: '#f8fafc' }}>
-                  Section C: Citizen Complaint Preferences &amp; Permissions
-                </h3>
-                <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8' }}>
-                  Configure notification channels and explicit permissions for evidence utilization in legal grievance filings.
-                </p>
-              </div>
-
-              <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                {/* Notification Channel */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                    Preferred Government Correspondence Channel
-                  </label>
-                  <select
-                    value={profile.preferredNotificationChannel}
-                    onChange={(e) => setProfile({ ...profile, preferredNotificationChannel: e.target.value })}
-                    style={{
-                      maxWidth: '320px',
-                      width: '100%',
-                      padding: '10px 14px',
-                      backgroundColor: '#1e293b',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
-                      fontSize: '13px',
-                      boxSizing: 'border-box'
-                    }}
-                  >
-                    <option value="SMS">SMS Notification (Official Grievance Receipt)</option>
-                    <option value="EMAIL">Email Correspondence</option>
-                    <option value="BOTH">Both SMS &amp; Email</option>
-                  </select>
-                </div>
-
-                {/* Permissions & Explicit Consent */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  padding: '16px',
-                  backgroundColor: 'rgba(0,0,0,0.2)',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.05)'
-                }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc', marginBottom: '4px' }}>
-                    Explicit Evidence &amp; Telemetry Permissions
-                  </div>
-
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={profile.consentDeviceLocation}
-                      onChange={(e) => setProfile({ ...profile, consentDeviceLocation: e.target.checked })}
-                      style={{ marginTop: '3px' }}
-                    />
-                    <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
-                      <strong>Consent to use high-precision device location:</strong> Grants permission to extract satellite coordinates during road inspections to map potholes to statutory authorities.
-                    </div>
-                  </label>
-
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={profile.consentInspectionPhotos}
-                      onChange={(e) => setProfile({ ...profile, consentInspectionPhotos: e.target.checked })}
-                      style={{ marginTop: '3px' }}
-                    />
-                    <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
-                      <strong>Consent to upload defect photos as legal evidence:</strong> Authorizes RoadGuard AI to upload anonymized road damage frames to official grievance portals as proof of damage.
-                    </div>
-                  </label>
-                </div>
-
-                {/* Additional Communication Notes */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '6px' }}>
-                    Special Communication or Accessibility Requests
-                  </label>
-                  <input
-                    type="text"
-                    value={profile.communicationPreferences}
-                    onChange={(e) => setProfile({ ...profile, communicationPreferences: e.target.value })}
-                    placeholder="e.g. Call after 5 PM; communicate in Telugu"
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      backgroundColor: '#1e293b',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
-                      fontSize: '13px',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="btn-primary"
-                    style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Preferences'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearForm}
-                    className="btn-secondary"
-                    style={{ padding: '10px 16px', fontSize: '13px' }}
-                  >
-                    Clear Form
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* ======================================================== */}
-          {/* SECTION D: CONNECTED GOVERNMENT SERVICES                 */}
-          {/* ======================================================== */}
-          {activeTab === 'portals' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Playwright Agent Status Banner */}
-              <div style={{
-                backgroundColor: '#0f172a',
-                border: `1px solid ${workerStatus.connected ? 'rgba(0, 245, 160, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
-                borderRadius: '12px',
-                padding: '16px 20px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Cpu size={20} color={workerStatus.connected ? '#00f5a0' : '#eab308'} />
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>
-                      Playwright Local Automation Worker
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                      Required for automated form-filling on official portals with human-in-the-loop OTP/CAPTCHA handoffs.
-                    </div>
-                  </div>
-                </div>
-
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  padding: '4px 10px',
-                  borderRadius: '999px',
-                  backgroundColor: workerStatus.connected ? 'rgba(0, 245, 160, 0.15)' : 'rgba(234, 179, 8, 0.15)',
-                  color: workerStatus.connected ? '#00f5a0' : '#eab308',
-                  border: `1px solid ${workerStatus.connected ? 'rgba(0, 245, 160, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`
-                }}>
-                  {workerStatus.connected ? `Agent Active (${workerStatus.activeWorkerCount} worker)` : 'Agent Offline (Manual Handoff)'}
-                </span>
-              </div>
-
-              {/* Same-Origin Policy & Citizen OTP Security Notice */}
-              <div style={{
-                padding: '12px 16px',
-                backgroundColor: 'rgba(56, 189, 248, 0.08)',
-                border: '1px solid rgba(56, 189, 248, 0.25)',
-                borderRadius: '10px',
-                fontSize: '12px',
-                color: '#cbd5e1',
-                lineHeight: 1.5,
-                display: 'flex',
-                gap: '12px',
-                alignItems: 'flex-start'
-              }}>
-                <Info size={18} color="#38bdf8" style={{ flexShrink: 0, marginTop: '2px' }} />
-                <div>
-                  <strong style={{ color: '#38bdf8' }}>Same-Origin Policy & Citizen OTP Security Notice:</strong>
-                  <p style={{ margin: '4px 0 0' }}>
-                    Official government grievance portals (NHAI Rajmargyatra, AP CDMA / Puramithra, AP Mee Kosam) require live citizen mobile OTP and CAPTCHA authentication under statutory security rules. RoadGuard pre-validates all evidence files, defect coordinates, and civic jurisdiction data, and enables 1-click clipboard transfer for immediate official lodging.
-                  </p>
-                </div>
-              </div>
-
-              {/* Portal Notice Toast */}
-              {portalNotice && (
-                <div style={{
-                  padding: '12px 16px',
-                  backgroundColor: 'rgba(14, 165, 233, 0.15)',
-                  border: '1px solid #0ea5e9',
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                Email Address
+              </label>
+              <input
+                type="email"
+                placeholder="e.g. citizen@roadguard.org"
+                value={profile.email}
+                onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
                   borderRadius: '8px',
-                  color: '#38bdf8',
-                  fontSize: '12px'
+                  border: '1px solid #cbd5e1',
+                  fontSize: '13px',
+                  color: '#0f172a',
+                  outline: 'none',
+                  background: '#f8fafc'
+                }}
+              />
+            </div>
+
+            {/* Vehicle Fields */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Vehicle Reg. Number (VRN)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. AP 16 AB 1234"
+                  value={profile.primaryVrn}
+                  onChange={(e) => setProfile({ ...profile, primaryVrn: e.target.value.toUpperCase() })}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    outline: 'none',
+                    background: '#f8fafc',
+                    fontFamily: 'monospace',
+                    fontWeight: 600
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Vehicle Type
+                </label>
+                <select
+                  value={profile.vehicleType}
+                  onChange={(e) => setProfile({ ...profile, vehicleType: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    outline: 'none',
+                    background: '#f8fafc',
+                    fontWeight: 600
+                  }}
+                >
+                  <option value="CAR">Car / SUV</option>
+                  <option value="BIKE">Two-Wheeler / Bike</option>
+                  <option value="HEAVY">Truck / Commercial</option>
+                </select>
+              </div>
+            </div>
+
+            {/* BookMyShow-Style "Auto-Detect My Location" Bar */}
+            <div style={{
+              background: '#f0f9ff',
+              border: '1px solid #bae6fd',
+              borderRadius: '10px',
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#0369a1' }}>
+                  Geospatial Jurisdiction & Location
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAutoDetectLocation}
+                  disabled={isGeocoding}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 14px',
+                    background: '#0284c7',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)'
+                  }}
+                >
+                  <MapPin size={13} />
+                  {isGeocoding ? 'Detecting...' : '📍 Auto-Detect My Location (Live GPS)'}
+                </button>
+              </div>
+
+              {autoLocationBadge ? (
+                <div style={{
+                  background: '#ffffff',
+                  border: '1px solid #7dd3fc',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                  fontSize: '12px',
+                  color: '#0f172a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}>
-                  <strong>{portalNotice.title}:</strong> {portalNotice.message}
+                  <ShieldCheck size={16} color="#0284c7" style={{ flexShrink: 0 }} />
+                  <div>
+                    <strong>Auto-Located:</strong> {autoLocationBadge.city} ({autoLocationBadge.district}, {autoLocationBadge.state} — {autoLocationBadge.pinCode})
+                    <div style={{ fontSize: '11px', color: '#0284c7', marginTop: '2px', fontWeight: 600 }}>
+                      Jurisdiction: {autoLocationBadge.jurisdiction}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: '11px', color: '#64748b' }}>
+                  Click Auto-Detect to reverse-geocode your GPS coordinate to your city, district, and responsible road authority automatically.
                 </div>
               )}
-
-              {/* Portal Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-                {portals.map((portal) => {
-                  const pId = portal.portalId || portal.id;
-                  const isRefreshing = refreshingPortalId === pId;
-
-                  return (
-                    <div
-                      key={pId}
-                      className="glass-card"
-                      style={{
-                        backgroundColor: '#0f172a',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        borderRadius: '12px',
-                        padding: '18px 20px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '12px',
-                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
-                        <div>
-                          <h4 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-                            {portal.portalName}
-                          </h4>
-                          <a
-                            href={portal.officialUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '11px',
-                              color: '#38bdf8',
-                              textDecoration: 'none',
-                              marginTop: '2px'
-                            }}
-                          >
-                            <ExternalLink size={11} /> {portal.officialUrl}
-                          </a>
-                        </div>
-
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '4px',
-                          backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                          color: '#38bdf8',
-                          border: '1px solid rgba(56, 189, 248, 0.3)'
-                        }}>
-                          {portal.status || 'MANUAL_HANDOFF_ONLY'}
-                        </span>
-                      </div>
-
-                      <div style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.45 }}>
-                        <strong style={{ color: '#94a3b8' }}>Jurisdiction:</strong> {portal.roadJurisdiction}
-                      </div>
-
-                      <div style={{
-                        fontSize: '11px',
-                        color: '#94a3b8',
-                        lineHeight: 1.45,
-                        backgroundColor: 'rgba(0,0,0,0.25)',
-                        padding: '10px',
-                        borderRadius: '6px'
-                      }}>
-                        {portal.connectionNotes}
-                      </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px' }}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleRefreshPortal(pId)}
-                            disabled={isRefreshing}
-                            className="btn-secondary"
-                            style={{ padding: '6px 12px', fontSize: '11px' }}
-                          >
-                            <RefreshCw size={12} className={isRefreshing ? 'spin' : ''} /> Check Status
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyCitizenData(portal)}
-                            className="btn-secondary"
-                            style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            title="Copy pre-formatted profile and jurisdiction data to clipboard for fast portal entry"
-                          >
-                            <FileText size={12} /> {copiedPortalId === pId ? 'Copied!' : '1-Click Copy'}
-                          </button>
-                        </div>
-
-                        <a
-                          href={portal.officialUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn-primary"
-                          style={{ padding: '6px 12px', fontSize: '11px', textDecoration: 'none' }}
-                        >
-                          Open Portal &rarr;
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
-          )}
 
-          {/* ======================================================== */}
-          {/* SECTION E & H: PROFILE READINESS & PORTAL REQUIREMENTS   */}
-          {/* ======================================================== */}
-          {activeTab === 'readiness' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Readiness Scores Overview Card */}
-              <div className="glass-card" style={{
-                backgroundColor: '#0f172a',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '14px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 4px', color: '#f8fafc' }}>
-                      Profile Readiness for Autonomous Grievance Filing
-                    </h3>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
-                      Evaluates saved citizen details against mandatory requirements of statutory road grievance portals.
-                    </p>
-                  </div>
+            {/* Buttons Row */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+              <button
+                type="submit"
+                disabled={isSaving}
+                style={{
+                  flex: 1,
+                  padding: '11px 20px',
+                  background: '#1e3a8a',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Save size={15} /> {isSaving ? 'Saving...' : 'Save Profile'}
+              </button>
 
-                  <span style={{
-                    padding: '4px 12px',
-                    borderRadius: '999px',
+              <button
+                type="button"
+                onClick={handleClearForm}
+                style={{
+                  padding: '11px 16px',
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  color: '#64748b',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* RIGHT COLUMN: Cute, Compact "Connected Portals" Strip */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '14px',
+          padding: '22px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              Connected Government Portals
+            </h3>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0' }}>
+              Pre-configured public grievance gateways for Andhra Pradesh & National Highways.
+            </p>
+          </div>
+
+          {/* 3 Sleek Compact Portal Mini-Cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* 1. NHAI Rajmargyatra */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+                  NHAI Rajmargyatra
+                </span>
+                <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#ecfdf5', color: '#059669' }}>
+                  Ready for 1-Click Handoff
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
+                National Highways (NH-prefix roads) across India.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <a
+                  href="https://rajmargyatra.nhai.gov.in/complaints"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    padding: '6px 10px',
+                    background: '#1e3a8a',
+                    color: '#ffffff',
+                    borderRadius: '6px',
                     fontSize: '11px',
                     fontWeight: 700,
-                    backgroundColor: readiness?.overallStatus === 'READY' ? 'rgba(0, 245, 160, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                    color: readiness?.overallStatus === 'READY' ? '#00f5a0' : '#fbbf24',
-                    border: `1px solid ${readiness?.overallStatus === 'READY' ? 'rgba(0, 245, 160, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
-                  }}>
-                    {readiness?.overallStatus || 'CHECKING READINESS'}
-                  </span>
-                </div>
-
-                {/* Score Meters */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-                  <div style={{ backgroundColor: 'rgba(0,0,0,0.25)', padding: '14px', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>
-                      <span>Personal Info Completeness</span>
-                      <strong style={{ color: '#00f5a0' }}>{readiness?.personalInfoCompletenessPercent || 0}%</strong>
-                    </div>
-                    <div style={{ width: '100%', height: '6px', backgroundColor: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${readiness?.personalInfoCompletenessPercent || 0}%`,
-                        height: '100%',
-                        backgroundColor: '#00f5a0',
-                        transition: 'width 0.3s ease'
-                      }} />
-                    </div>
-                  </div>
-
-                  <div style={{ backgroundColor: 'rgba(0,0,0,0.25)', padding: '14px', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>
-                      <span>Address &amp; Jurisdiction</span>
-                      <strong style={{ color: '#38bdf8' }}>{readiness?.addressJurisdictionCompletenessPercent || 0}%</strong>
-                    </div>
-                    <div style={{ width: '100%', height: '6px', backgroundColor: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${readiness?.addressJurisdictionCompletenessPercent || 0}%`,
-                        height: '100%',
-                        backgroundColor: '#38bdf8',
-                        transition: 'width 0.3s ease'
-                      }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Portal-Specific Requirements & Evaluation Cards */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <h4 style={{ fontSize: '14px', fontWeight: 700, margin: '6px 0 0', color: '#f8fafc' }}>
-                  Verified Portal Requirements Evaluation
-                </h4>
-
-                {readiness?.portalReadinessList?.map((p) => {
-                  return (
-                    <div
-                      key={p.portalId}
-                      className="glass-card"
-                      style={{
-                        backgroundColor: '#0f172a',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        borderRadius: '12px',
-                        padding: '18px 20px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '12px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
-                        <div>
-                          <h4 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-                            {p.portalName}
-                          </h4>
-                          <span style={{ fontSize: '11px', color: '#64748b' }}>
-                            {p.roadJurisdiction}
-                          </span>
-                        </div>
-
-                        <span style={{
-                          padding: '3px 10px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          backgroundColor: p.isReadyToPrepare ? 'rgba(0, 245, 160, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: p.isReadyToPrepare ? '#00f5a0' : '#f87171',
-                          border: `1px solid ${p.isReadyToPrepare ? 'rgba(0, 245, 160, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
-                        }}>
-                          {p.isReadyToPrepare ? 'Ready to Prepare Complaint' : 'Missing Required Details'}
-                        </span>
-                      </div>
-
-                      {/* Satisfied vs Missing Fields */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', fontSize: '12px' }}>
-                        <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
-                          <div style={{ color: '#00f5a0', fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle2 size={13} /> Satisfied Prerequisites:
-                          </div>
-                          {p.satisfiedFields.length > 0 ? (
-                            <ul style={{ margin: 0, paddingLeft: '16px', color: '#cbd5e1', lineHeight: 1.5 }}>
-                              {p.satisfiedFields.map((s, i) => <li key={i}>{s}</li>)}
-                            </ul>
-                          ) : (
-                            <div style={{ color: '#64748b' }}>None satisfied yet.</div>
-                          )}
-                        </div>
-
-                        <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
-                          <div style={{ color: p.missingRequiredFields.length > 0 ? '#ff3366' : '#94a3b8', fontWeight: 600, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <AlertCircle size={13} /> Missing Mandatory Fields:
-                          </div>
-                          {p.missingRequiredFields.length > 0 ? (
-                            <ul style={{ margin: 0, paddingLeft: '16px', color: '#f87171', lineHeight: 1.5 }}>
-                              {p.missingRequiredFields.map((m, i) => <li key={i}>{m}</li>)}
-                            </ul>
-                          ) : (
-                            <div style={{ color: '#00f5a0' }}>All mandatory fields satisfied!</div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Summary & Next Action */}
-                      <div style={{
-                        padding: '10px 14px',
-                        backgroundColor: 'rgba(56, 189, 248, 0.08)',
-                        border: '1px solid rgba(56, 189, 248, 0.2)',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        color: '#cbd5e1',
-                        lineHeight: 1.45
-                      }}>
-                        <div><strong style={{ color: '#38bdf8' }}>Status:</strong> {p.readinessSummary}</div>
-                        <div style={{ marginTop: '4px' }}><strong style={{ color: '#00f5a0' }}>Next Step:</strong> {p.nextCitizenAction}</div>
-                      </div>
-                    </div>
-                  );
-                })}
+                    textDecoration: 'none'
+                  }}
+                >
+                  Launch Portal ↗
+                </a>
+                <a
+                  href="https://rajmargyatra.nhai.gov.in"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '6px 10px',
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    color: '#334155',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    textDecoration: 'none'
+                  }}
+                >
+                  Check Status ↗
+                </a>
               </div>
             </div>
-          )}
-        </>
-      )}
+
+            {/* 2. AP CDMA Puramithra */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+                  AP CDMA Puramithra
+                </span>
+                <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#ecfdf5', color: '#059669' }}>
+                  Ready for 1-Click Handoff
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
+                Urban Local Bodies, Municipal Corporations, and town internal roads.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <a
+                  href="https://cdma.ap.gov.in/services/grievances/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    padding: '6px 10px',
+                    background: '#0d9488',
+                    color: '#ffffff',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    textDecoration: 'none'
+                  }}
+                >
+                  Launch Portal ↗
+                </a>
+                <a
+                  href="https://puraaseva.ap.gov.in"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '6px 10px',
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    color: '#334155',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    textDecoration: 'none'
+                  }}
+                >
+                  Check Status ↗
+                </a>
+              </div>
+            </div>
+
+            {/* 3. AP Mee Kosam / PGRS */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '10px',
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+                  AP Mee Kosam (PGRS)
+                </span>
+                <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', background: '#ecfdf5', color: '#059669' }}>
+                  Ready for 1-Click Handoff
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>
+                Andhra Pradesh Public Grievance Redressal System & State Highways.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <a
+                  href="https://meekosam.ap.gov.in/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    padding: '6px 10px',
+                    background: '#4f46e5',
+                    color: '#ffffff',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    textDecoration: 'none'
+                  }}
+                >
+                  Launch Portal ↗
+                </a>
+                <a
+                  href="https://meekosam.ap.gov.in/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '6px 10px',
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    color: '#334155',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    textDecoration: 'none'
+                  }}
+                >
+                  Check Status ↗
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

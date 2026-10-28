@@ -1,17 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  MapPin,
-  AlertTriangle,
-  History,
-  FileBarChart,
+  Activity,
+  Car,
+  FileText,
+  UserCheck,
   Settings,
   HelpCircle,
   X,
-  Shield,
-  Activity,
-  ChevronRight,
-  ExternalLink,
-  UserCheck
+  ChevronRight
 } from 'lucide-react';
 
 export default function NavigationDrawer({
@@ -51,50 +47,49 @@ export default function NavigationDrawer({
 
   if (!isOpen) return null;
 
+  // 4 Consolidated Clean Hubs + Settings + About
   const NAV_ITEMS = [
     {
-      id: 'dashboard',
-      label: 'New Map / Live Monitoring',
+      id: 'scanner',
+      label: 'Live Road Scanner',
       icon: Activity,
+      accentColor: '#2563EB',
       desc: 'Real-time camera detection & geospatial map'
     },
     {
-      id: 'issues',
-      label: 'Detected Road Issues',
-      icon: AlertTriangle,
-      desc: 'Review road defects & draft complaints',
+      id: 'journeys-issues',
+      label: 'Journeys & Road Issues',
+      icon: Car,
+      accentColor: '#4F46E5',
+      desc: 'Trip logs, route trails, 2D/3D inspection & road defects',
       badge: issuesCount > 0 ? issuesCount : null
     },
     {
-      id: 'journeys',
-      label: 'Journey History',
-      icon: History,
-      desc: 'Logs, route trails & defect metrics',
-      badge: journeysCount > 0 ? journeysCount : null
-    },
-    {
-      id: 'reports',
-      label: 'Journey Reports',
-      icon: FileBarChart,
-      desc: '2D & 3D route analysis & PDF export',
-      badge: journeysCount > 0 ? journeysCount : null
+      id: 'gov-reports',
+      label: 'Government Reports',
+      icon: FileText,
+      accentColor: '#0D9488',
+      desc: 'Official filing audit ledger (NHAI, AP CDMA, Mee Kosam)'
     },
     {
       id: 'profile',
-      label: 'My Profile & Connected Services',
+      label: 'Citizen Profile & Portals',
       icon: UserCheck,
-      desc: 'Vehicle registration & official complaint portals'
+      accentColor: '#0284C7',
+      desc: 'Citizen identity, vehicle details & 3-portal gateway'
     },
     {
       id: 'settings',
       label: 'Settings',
       icon: Settings,
-      desc: 'GPS accuracy, AI thresholds & storage'
+      accentColor: '#64748B',
+      desc: 'Civic Daylight theme, alerts, Auto-GPS & cache'
     },
     {
       id: 'about',
       label: 'Help and About',
       icon: HelpCircle,
+      accentColor: '#64748B',
       desc: 'Documentation, attribution & legal notice'
     }
   ];
@@ -109,7 +104,7 @@ export default function NavigationDrawer({
         inset: 0,
         zIndex: 2000,
         display: 'flex',
-        backgroundColor: 'rgba(5, 8, 16, 0.75)',
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
         backdropFilter: 'blur(8px)',
         animation: 'fadeIn 0.2s ease'
       }}
@@ -124,11 +119,11 @@ export default function NavigationDrawer({
           width: '100%',
           maxWidth: '360px',
           height: '100%',
-          backgroundColor: '#0f1422',
-          borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+          backgroundColor: 'var(--bg-secondary, #ffffff)',
+          borderRight: '1px solid var(--border-subtle, #e2e8f0)',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '10px 0 30px rgba(0, 0, 0, 0.6)',
+          boxShadow: '10px 0 30px rgba(0, 0, 0, 0.25)',
           animation: 'slideInLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
           outline: 'none'
         }}
@@ -136,11 +131,11 @@ export default function NavigationDrawer({
         {/* Drawer Header */}
         <div style={{
           padding: '20px 24px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: '1px solid var(--border-subtle, #e2e8f0)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'rgba(23, 32, 51, 0.4)'
+          background: 'var(--bg-tertiary, #f8fafc)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <img
@@ -151,16 +146,16 @@ export default function NavigationDrawer({
                 height: '36px',
                 borderRadius: '8px',
                 objectFit: 'contain',
-                boxShadow: '0 0 12px rgba(0, 245, 160, 0.35)'
+                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)'
               }}
             />
             <div>
-              <h2 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: '#f8fafc', letterSpacing: '-0.01em' }}>
-                ROADGUARD <span style={{ color: '#00f5a0' }}>AI</span>
+              <h2 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-main, #0f172a)', letterSpacing: '-0.01em' }}>
+                ROADGUARD <span style={{ color: '#2563EB' }}>AI</span>
               </h2>
-              <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8' }}>
+              <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-muted, #475569)' }}>
                 Status: <strong style={{
-                  color: recordingStatus === 'RECORDING' ? '#00f5a0' : recordingStatus === 'PAUSED_STATIONARY' ? '#f59e0b' : '#94a3b8'
+                  color: recordingStatus === 'RECORDING' ? '#10b981' : recordingStatus === 'PAUSED_STATIONARY' ? '#f59e0b' : '#64748b'
                 }}>{recordingStatus}</strong>
               </p>
             </div>
@@ -170,9 +165,9 @@ export default function NavigationDrawer({
             onClick={onClose}
             aria-label="Close menu"
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: '#94a3b8',
+              background: 'var(--bg-secondary, #ffffff)',
+              border: '1px solid var(--border-subtle, #cbd5e1)',
+              color: 'var(--text-muted, #475569)',
               cursor: 'pointer',
               padding: '8px',
               borderRadius: '8px',
@@ -186,11 +181,14 @@ export default function NavigationDrawer({
           </button>
         </div>
 
-        {/* Navigation Items */}
+        {/* Navigation Items (4 Consolidated Hubs + Settings + About) */}
         <nav style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive = activeView === item.id;
+            const isActive = activeView === item.id || 
+              (item.id === 'scanner' && activeView === 'dashboard') ||
+              (item.id === 'journeys-issues' && (activeView === 'issues' || activeView === 'journeys' || activeView === 'reports'));
+
             return (
               <button
                 key={item.id}
@@ -201,8 +199,8 @@ export default function NavigationDrawer({
                 style={{
                   width: '100%',
                   padding: '12px 14px',
-                  background: isActive ? 'rgba(0, 245, 160, 0.12)' : 'transparent',
-                  border: isActive ? '1px solid rgba(0, 245, 160, 0.35)' : '1px solid transparent',
+                  background: isActive ? `${item.accentColor}18` : 'transparent',
+                  border: isActive ? `1.5px solid ${item.accentColor}55` : '1.5px solid transparent',
                   borderRadius: '10px',
                   display: 'flex',
                   alignItems: 'center',
@@ -213,15 +211,16 @@ export default function NavigationDrawer({
                 }}
               >
                 <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '6px',
-                  background: isActive ? 'rgba(0, 245, 160, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '8px',
+                  background: isActive ? item.accentColor : 'var(--bg-tertiary, #f1f5f9)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: isActive ? '#00f5a0' : '#94a3b8',
-                  flexShrink: 0
+                  color: isActive ? '#ffffff' : 'var(--text-muted, #475569)',
+                  flexShrink: 0,
+                  boxShadow: isActive ? `0 2px 8px ${item.accentColor}40` : 'none'
                 }}>
                   <Icon size={18} />
                 </div>
@@ -229,7 +228,7 @@ export default function NavigationDrawer({
                   <div style={{
                     fontSize: '13px',
                     fontWeight: isActive ? 700 : 600,
-                    color: isActive ? '#00f5a0' : '#f1f5f9',
+                    color: isActive ? item.accentColor : 'var(--text-main, #0f172a)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between'
@@ -237,7 +236,7 @@ export default function NavigationDrawer({
                     <span>{item.label}</span>
                     {item.badge && (
                       <span style={{
-                        background: '#ff3366',
+                        background: '#dc2626',
                         color: '#ffffff',
                         fontSize: '10px',
                         fontWeight: 700,
@@ -248,11 +247,11 @@ export default function NavigationDrawer({
                       </span>
                     )}
                   </div>
-                  <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b', lineHeight: 1.3 }}>
+                  <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-muted, #64748b)', lineHeight: 1.3 }}>
                     {item.desc}
                   </p>
                 </div>
-                <ChevronRight size={14} color={isActive ? '#00f5a0' : '#475569'} />
+                <ChevronRight size={14} color={isActive ? item.accentColor : '#94a3b8'} />
               </button>
             );
           })}
@@ -261,14 +260,14 @@ export default function NavigationDrawer({
         {/* Drawer Footer */}
         <div style={{
           padding: '16px 20px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-          background: 'rgba(15, 21, 35, 0.7)',
+          borderTop: '1px solid var(--border-subtle, #e2e8f0)',
+          background: 'var(--bg-tertiary, #f8fafc)',
           fontSize: '11px',
-          color: '#64748b'
+          color: 'var(--text-muted, #64748b)'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span>RoadGuard AI v1.0</span>
-            <span style={{ color: '#00f5a0' }}>ONNX YOLO11s</span>
+            <span style={{ color: '#2563EB', fontWeight: 600 }}>ONNX YOLO11s</span>
           </div>
           <div>Open-source informed • Leaflet OSM • MIT & AGPL</div>
         </div>

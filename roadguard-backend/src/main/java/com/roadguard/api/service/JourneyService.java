@@ -1,11 +1,17 @@
 package com.roadguard.api.service;
 
 import com.roadguard.api.dto.*;
+import com.roadguard.api.entity.Complaint;
+import com.roadguard.api.entity.DetectionObservation;
 import com.roadguard.api.entity.EvidenceFrame;
 import com.roadguard.api.entity.GpsLocation;
 import com.roadguard.api.entity.Journey;
+import com.roadguard.api.entity.RoadIssue;
+import com.roadguard.api.repository.ComplaintRepository;
+import com.roadguard.api.repository.DetectionObservationRepository;
 import com.roadguard.api.repository.EvidenceFrameRepository;
 import com.roadguard.api.repository.GpsLocationRepository;
+import com.roadguard.api.repository.InvestigationResultRepository;
 import com.roadguard.api.repository.JourneyRepository;
 import com.roadguard.api.repository.RoadIssueRepository;
 import org.slf4j.Logger;
@@ -31,6 +37,9 @@ public class JourneyService {
     private final GpsLocationRepository gpsLocationRepository;
     private final EvidenceFrameRepository evidenceFrameRepository;
     private final RoadIssueRepository roadIssueRepository;
+    private final ComplaintRepository complaintRepository;
+    private final InvestigationResultRepository investigationResultRepository;
+    private final DetectionObservationRepository detectionObservationRepository;
     private final EvidenceStorageService storageService;
     private final InferenceService inferenceService;
     private final NotificationService notificationService;
@@ -40,6 +49,9 @@ public class JourneyService {
         GpsLocationRepository gpsLocationRepository,
         EvidenceFrameRepository evidenceFrameRepository,
         RoadIssueRepository roadIssueRepository,
+        ComplaintRepository complaintRepository,
+        InvestigationResultRepository investigationResultRepository,
+        DetectionObservationRepository detectionObservationRepository,
         EvidenceStorageService storageService,
         InferenceService inferenceService,
         NotificationService notificationService
@@ -48,6 +60,9 @@ public class JourneyService {
         this.gpsLocationRepository = gpsLocationRepository;
         this.evidenceFrameRepository = evidenceFrameRepository;
         this.roadIssueRepository = roadIssueRepository;
+        this.complaintRepository = complaintRepository;
+        this.investigationResultRepository = investigationResultRepository;
+        this.detectionObservationRepository = detectionObservationRepository;
         this.storageService = storageService;
         this.inferenceService = inferenceService;
         this.notificationService = notificationService;
@@ -277,5 +292,42 @@ public class JourneyService {
         long issues = roadIssueRepository.findByJourneyId(j.getId()).size();
         long gps = gpsLocationRepository.countByJourneyId(j.getId());
         return JourneyResponse.fromEntity(j, issues, gps);
+    }
+
+    @Transactional
+    public void deleteJourney(Long id) {
+        Journey journey = journeyRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Journey not found: " + id));
+
+        // 1. Delete associated road issues and dependent complaints/investigations/observations
+        List<RoadIssue> issues = roadIssueRepository.findByJourneyId(id);
+        for (RoadIssue issue : issues) {
+            List<Complaint> complaints = complaintRepository.findByRoadIssueId(issue.getId());
+            complaintRepository.deleteAll(complaints);
+
+            investigationResultRepository.findByRoadIssueId(issue.getId())
+                .ifPresent(investigationResultRepository::delete);
+
+            List<DetectionObservation> issueObs = detectionObservationRepository.findByRoadIssueId(issue.getId());
+            detectionObservationRepository.deleteAll(issueObs);
+
+            roadIssueRepository.delete(issue);
+        }
+
+        // 2. Delete all frames and their detection observations
+        List<EvidenceFrame> frames = evidenceFrameRepository.findByJourneyIdOrderByFrameSequenceAsc(id);
+        for (EvidenceFrame frame : frames) {
+            List<DetectionObservation> frameObs = detectionObservationRepository.findByFrameId(frame.getId());
+            detectionObservationRepository.deleteAll(frameObs);
+            evidenceFrameRepository.delete(frame);
+        }
+
+        // 3. Delete all GPS points
+        List<GpsLocation> locations = gpsLocationRepository.findByJourneyIdOrderBySequenceNumAsc(id);
+        gpsLocationRepository.deleteAll(locations);
+
+        // 4. Delete journey
+        journeyRepository.delete(journey);
+        log.info("Deleted journey #{} and all associated child points, frames, and road issues", id);
     }
 }

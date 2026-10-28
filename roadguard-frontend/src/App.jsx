@@ -15,18 +15,21 @@ import {
   Activity,
   AlertCircle,
   FileText,
-  Navigation
+  Navigation,
+  Undo2,
+  Redo2,
+  UserCheck,
+  Settings as SettingsIcon
 } from 'lucide-react';
 import MapViewer from './components/MapViewer';
 import CameraViewfinder from './components/CameraViewfinder';
 import DiagnosticPanel from './components/DiagnosticPanel';
 import GrievanceModal from './components/GrievanceModal';
 import NavigationDrawer from './components/NavigationDrawer';
-import IssuesView from './components/IssuesView';
-import HistoryView from './components/HistoryView';
-import SettingsView from './components/SettingsView';
-import JourneyReportsView from './components/JourneyReportsView';
+import JourneysAndIssuesHub from './components/JourneysAndIssuesHub';
+import GovernmentReportsView from './components/GovernmentReportsView';
 import ProfileView from './components/ProfileView';
+import SettingsView from './components/SettingsView';
 import HelpAboutModal from './components/HelpAboutModal';
 import {
   getHealth,
@@ -41,12 +44,140 @@ import {
 } from './api';
 import { isValidCoordinate, haversineDistanceMeters } from './utils/geoUtils';
 
+// Section definition dictionary for the 4 consolidated hubs + settings
+const SECTION_CONFIG = {
+  scanner: {
+    id: 'scanner',
+    title: 'Live Road Scanner',
+    shortTitle: 'Live Scanner',
+    hash: '#scanner',
+    color: '#2563EB',
+    icon: Activity
+  },
+  'journeys-issues': {
+    id: 'journeys-issues',
+    title: 'Journeys & Road Issues',
+    shortTitle: 'Journeys & Issues',
+    hash: '#journeys-issues',
+    color: '#4F46E5',
+    icon: Car
+  },
+  'gov-reports': {
+    id: 'gov-reports',
+    title: 'Government Reports',
+    shortTitle: 'Gov Reports',
+    hash: '#gov-reports',
+    color: '#0D9488',
+    icon: FileText
+  },
+  profile: {
+    id: 'profile',
+    title: 'Citizen Profile & Portals',
+    shortTitle: 'Profile',
+    hash: '#profile',
+    color: '#0284C7',
+    icon: UserCheck
+  },
+  settings: {
+    id: 'settings',
+    title: 'Settings',
+    shortTitle: 'Settings',
+    hash: '#settings',
+    color: '#64748B',
+    icon: SettingsIcon
+  }
+};
+
+function parseViewFromHash() {
+  if (typeof window === 'undefined') return 'scanner';
+  const raw = (window.location.hash || '').replace('#', '').trim();
+  if (raw === 'scanner' || raw === 'dashboard') return 'scanner';
+  if (raw === 'journeys-issues' || raw === 'issues' || raw === 'journeys' || raw === 'reports') return 'journeys-issues';
+  if (raw === 'gov-reports') return 'gov-reports';
+  if (raw === 'profile') return 'profile';
+  if (raw === 'settings') return 'settings';
+  return 'scanner';
+}
+
 export default function App() {
-  // Navigation & View State
-  const [activeView, setActiveView] = useState('dashboard'); // 'dashboard' | 'issues' | 'journeys' | 'reports' | 'settings'
+  // Navigation & View State with Undo/Redo & Hash Sync
+  const [activeView, setActiveView] = useState(() => parseViewFromHash());
+  const [historyStack, setHistoryStack] = useState(() => [parseViewFromHash()]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const [selectedReportId, setSelectedReportId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+
+  // Synchronize browser history popstate / hashchange
+  useEffect(() => {
+    function handleHashChange() {
+      const v = parseViewFromHash();
+      setActiveView(v);
+    }
+    window.addEventListener('popstate', handleHashChange);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('popstate', handleHashChange);
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
+  const navigateTo = useCallback((viewId, addToHistory = true) => {
+    let normalized = viewId;
+    if (viewId === 'dashboard') normalized = 'scanner';
+    else if (viewId === 'issues' || viewId === 'journeys' || viewId === 'reports') normalized = 'journeys-issues';
+
+    if (normalized === 'about') {
+      setAboutOpen(true);
+      return;
+    }
+
+    setActiveView(normalized);
+
+    const targetHash = SECTION_CONFIG[normalized]?.hash || ('#' + normalized);
+    if (window.location.hash !== targetHash) {
+      window.history.pushState(null, '', targetHash);
+    }
+
+    if (addToHistory) {
+      setHistoryStack((prev) => {
+        const next = prev.slice(0, historyIndex + 1);
+        if (next[next.length - 1] !== normalized) {
+          next.push(normalized);
+        }
+        return next;
+      });
+      setHistoryIndex((prev) => {
+        const next = historyStack.slice(0, prev + 1);
+        if (next[next.length - 1] !== normalized) {
+          return prev + 1;
+        }
+        return prev;
+      });
+    }
+  }, [historyIndex, historyStack]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const targetIndex = historyIndex - 1;
+      const targetView = historyStack[targetIndex];
+      setHistoryIndex(targetIndex);
+      setActiveView(targetView);
+      const targetHash = SECTION_CONFIG[targetView]?.hash || ('#' + targetView);
+      window.history.pushState(null, '', targetHash);
+    }
+  }, [historyIndex, historyStack]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndex < historyStack.length - 1) {
+      const targetIndex = historyIndex + 1;
+      const targetView = historyStack[targetIndex];
+      setHistoryIndex(targetIndex);
+      setActiveView(targetView);
+      const targetHash = SECTION_CONFIG[targetView]?.hash || ('#' + targetView);
+      window.history.pushState(null, '', targetHash);
+    }
+  }, [historyIndex, historyStack]);
 
   // Backend Health & Stats
   const [health, setHealth] = useState(null);
@@ -96,7 +227,9 @@ export default function App() {
     }
     return {
       units: 'METRIC',
-      theme: 'DARK',
+      theme: 'DAYLIGHT',
+      autoCaptureAndChime: true,
+      autoGpsTracking: true,
       frameInterval: 2.8,
       stationaryGraceSec: 10,
       maxGpsAccuracy: 25,
@@ -112,6 +245,13 @@ export default function App() {
       console.warn('Failed to save settings to localStorage:', e);
     }
   }
+
+  // Synchronize Civic Daylight / Night Drive theme
+  useEffect(() => {
+    const themeMode = settings.theme === 'DARK' ? 'dark' : 'daylight';
+    document.documentElement.setAttribute('data-theme', themeMode);
+    document.body.setAttribute('data-theme', themeMode);
+  }, [settings.theme]);
 
   function formatDistance(meters) {
     if (meters == null) return settings.units === 'IMPERIAL' ? '0.00 mi' : '0.00 km';
@@ -623,28 +763,31 @@ export default function App() {
       flexDirection: 'column',
       backgroundColor: 'var(--bg-primary)'
     }}>
-      {/* 1. Compact Header */}
+      {/* 1. Deep Civic Navy Top Navigation Header with Undo/Redo & Active Section Pill */}
       <header style={{
-        padding: '10px 20px',
-        borderBottom: '1px solid var(--border-subtle)',
-        background: 'rgba(15, 21, 35, 0.95)',
-        backdropFilter: 'blur(16px)',
+        padding: '12px 20px',
+        backgroundColor: 'var(--header-bg, #1e3a8a)',
+        color: 'var(--header-text, #ffffff)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.12)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         position: 'sticky',
         top: 0,
-        zIndex: 100
+        zIndex: 100,
+        flexWrap: 'wrap',
+        gap: '10px'
       }}>
-        {/* Left: Hamburger Button & Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Left: Hamburger, Undo/Redo, App Brand, Dynamic Active Section Pill */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button
             onClick={() => setDrawerOpen(true)}
             aria-label="Open navigation menu"
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: '#f8fafc',
+              background: 'rgba(255, 255, 255, 0.12)',
+              border: '1px solid rgba(255, 255, 255, 0.22)',
+              color: '#ffffff',
               cursor: 'pointer',
               padding: '8px',
               borderRadius: '8px',
@@ -657,26 +800,120 @@ export default function App() {
             <Menu size={20} />
           </button>
 
-          <img
-            src="/favicon-48.png"
-            alt="RoadGuard AI App Icon"
-            style={{
-              width: '34px',
-              height: '34px',
-              borderRadius: '8px',
-              objectFit: 'contain',
-              boxShadow: '0 0 12px rgba(0, 245, 160, 0.35)'
-            }}
-          />
+          {/* Undo (← Back) and Redo (Forward →) buttons */}
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            background: 'rgba(0, 0, 0, 0.22)',
+            borderRadius: '8px',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            overflow: 'hidden'
+          }}>
+            <button
+              onClick={handleUndo}
+              disabled={historyIndex <= 0}
+              aria-label="Undo navigation step back"
+              title="Go back to previous section (Undo)"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                color: historyIndex > 0 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
+                cursor: historyIndex > 0 ? 'pointer' : 'not-allowed',
+                padding: '6px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11px',
+                fontWeight: 600,
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Undo2 size={13} />
+              <span>Back</span>
+            </button>
 
-          <div>
-            <h1 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: '#f8fafc', letterSpacing: '-0.01em' }}>
-              ROADGUARD <span style={{ color: '#00f5a0' }}>AI</span>
-            </h1>
-            <p className="header-subtitle" style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>
-              Intelligent Road-Monitoring & Grievance Redressal
-            </p>
+            <button
+              onClick={handleRedo}
+              disabled={historyIndex >= historyStack.length - 1}
+              aria-label="Redo navigation step forward"
+              title="Go forward to next section (Redo)"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: historyIndex < historyStack.length - 1 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
+                cursor: historyIndex < historyStack.length - 1 ? 'pointer' : 'not-allowed',
+                padding: '6px 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11px',
+                fontWeight: 600,
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span>Forward</span>
+              <Redo2 size={13} />
+            </button>
           </div>
+
+          {/* Brand Logo & Name */}
+          <div
+            onClick={() => navigateTo('scanner')}
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+          >
+            <img
+              src="/favicon-48.png"
+              alt="RoadGuard AI App Icon"
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                objectFit: 'contain',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.25)'
+              }}
+            />
+            <div>
+              <h1 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+                ROADGUARD <span style={{ color: '#93c5fd' }}>AI</span>
+              </h1>
+              <p className="header-subtitle" style={{ margin: 0, fontSize: '10px', color: 'rgba(255, 255, 255, 0.75)' }}>
+                Intelligent Road-Monitoring & Grievance Redressal
+              </p>
+            </div>
+          </div>
+
+          {/* Dynamic Active Section Pill */}
+          {(() => {
+            const currentSectionKey = (activeView === 'dashboard' ? 'scanner' : activeView);
+            const activeConf = SECTION_CONFIG[currentSectionKey] || SECTION_CONFIG.scanner;
+            const IconComp = activeConf.icon;
+            return (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(255, 255, 255, 0.18)',
+                border: `1.5px solid ${activeConf.color}`,
+                padding: '4px 12px',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#ffffff',
+                boxShadow: `0 0 10px ${activeConf.color}50`
+              }}>
+                <div style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: activeConf.color,
+                  boxShadow: `0 0 6px ${activeConf.color}`
+                }} />
+                <IconComp size={13} color="#ffffff" />
+                <span>{activeConf.title}</span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Right: GPS Status, Recording Status & Backend Connectivity Indicator */}
@@ -686,8 +923,8 @@ export default function App() {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            background: 'rgba(0, 0, 0, 0.4)',
-            border: '1px solid var(--border-subtle)',
+            background: 'rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
             padding: '4px 10px',
             borderRadius: '8px',
             fontSize: '11px'
@@ -696,10 +933,10 @@ export default function App() {
               width: '7px',
               height: '7px',
               borderRadius: '50%',
-              backgroundColor: gpsStatus === 'GPS ACTIVE' ? '#00f5a0' : (gpsStatus === 'GPS CONNECTING' ? '#f59e0b' : (gpsStatus === 'GPS OFF' ? '#64748b' : '#ff3366')),
-              boxShadow: gpsStatus === 'GPS ACTIVE' ? '0 0 8px #00f5a0' : 'none'
+              backgroundColor: gpsStatus === 'GPS ACTIVE' ? '#10b981' : (gpsStatus === 'GPS CONNECTING' ? '#f59e0b' : (gpsStatus === 'GPS OFF' ? '#94a3b8' : '#ef4444')),
+              boxShadow: gpsStatus === 'GPS ACTIVE' ? '0 0 8px #10b981' : 'none'
             }} />
-            <span style={{ color: '#cbd5e1' }}>
+            <span style={{ color: '#ffffff' }}>
               GPS: <strong>{gpsStatus}</strong>{currentLocation?.accuracy ? ` (±${Math.round(currentLocation.accuracy)}m)` : ''}
             </span>
           </div>
@@ -709,20 +946,20 @@ export default function App() {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            background: activeJourney ? 'rgba(0, 245, 160, 0.12)' : 'rgba(255, 255, 255, 0.05)',
-            border: `1px solid ${activeJourney ? 'rgba(0, 245, 160, 0.35)' : 'rgba(255, 255, 255, 0.1)'}`,
+            background: activeJourney ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+            border: `1px solid ${activeJourney ? 'rgba(16, 185, 129, 0.45)' : 'rgba(255, 255, 255, 0.15)'}`,
             padding: '4px 10px',
             borderRadius: '999px',
             fontSize: '11px',
             fontWeight: 700,
-            color: activeJourney ? '#00f5a0' : '#94a3b8'
+            color: activeJourney ? '#a7f3d0' : '#e2e8f0'
           }}>
             <div style={{
               width: '7px',
               height: '7px',
               borderRadius: '50%',
-              backgroundColor: activeJourney ? '#00f5a0' : '#64748b',
-              boxShadow: activeJourney ? '0 0 8px #00f5a0' : 'none'
+              backgroundColor: activeJourney ? '#10b981' : '#94a3b8',
+              boxShadow: activeJourney ? '0 0 8px #10b981' : 'none'
             }} />
             <span>{activeJourney ? recordingStatus : 'STANDBY'}</span>
           </div>
@@ -735,8 +972,8 @@ export default function App() {
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              background: 'rgba(0, 0, 0, 0.4)',
-              border: '1px solid var(--border-subtle)',
+              background: 'rgba(0, 0, 0, 0.25)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
               padding: '4px 10px',
               borderRadius: '8px',
               fontSize: '11px',
@@ -746,10 +983,10 @@ export default function App() {
               width: '7px',
               height: '7px',
               borderRadius: '50%',
-              backgroundColor: health?.status === 'UP' ? '#00f5a0' : (isWakingBackend ? '#f59e0b' : '#ff3366'),
-              boxShadow: health?.status === 'UP' ? '0 0 8px #00f5a0' : (isWakingBackend ? '0 0 8px #f59e0b' : 'none')
+              backgroundColor: health?.status === 'UP' ? '#10b981' : (isWakingBackend ? '#f59e0b' : '#ef4444'),
+              boxShadow: health?.status === 'UP' ? '0 0 8px #10b981' : (isWakingBackend ? '0 0 8px #f59e0b' : 'none')
             }} />
-            <span style={{ color: '#cbd5e1' }}>
+            <span style={{ color: '#ffffff' }}>
               Backend: <strong>{health?.status === 'UP' ? 'Online' : (isWakingBackend ? 'Waking...' : 'Offline')}</strong>
             </span>
           </div>
@@ -781,13 +1018,7 @@ export default function App() {
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         activeView={activeView}
-        onNavigate={(viewId) => {
-          if (viewId === 'about') {
-            setAboutOpen(true);
-          } else {
-            setActiveView(viewId);
-          }
-        }}
+        onNavigate={navigateTo}
         issuesCount={issues.length}
         journeysCount={journeysList.length}
         recordingStatus={activeJourney ? recordingStatus : 'STOPPED'}
@@ -795,8 +1026,8 @@ export default function App() {
 
       {/* 3. Main Views */}
       <main style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* VIEW 1: Live Monitoring Dashboard */}
-        {activeView === 'dashboard' && (
+        {/* VIEW 1: Live Road Scanner Dashboard */}
+        {(activeView === 'scanner' || activeView === 'dashboard') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%' }}>
             {/* GPS Signal Warning or Permission Notice (Non-blocking inline panels) */}
             {currentLocation && currentLocation.accuracy > settings.maxGpsAccuracy && (
@@ -939,7 +1170,7 @@ export default function App() {
                   <button
                     onClick={() => {
                       setSelectedReportId(completedJourneyBanner.id);
-                      setActiveView('reports');
+                      navigateTo('journeys-issues');
                     }}
                     className="btn-primary"
                     style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '6px' }}
@@ -1236,7 +1467,7 @@ export default function App() {
                     <AlertTriangle size={15} color="#f59e0b" /> Recent Confirmed Road Defects ({issues.length})
                   </span>
                   <button
-                    onClick={() => setActiveView('issues')}
+                    onClick={() => navigateTo('journeys-issues')}
                     style={{
                       background: 'transparent',
                       border: 'none',
@@ -1302,50 +1533,45 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 2: Detected Road Issues View */}
-        {activeView === 'issues' && (
-          <IssuesView
+        {/* VIEW 2: Journeys & Road Issues Consolidated Hub */}
+        {activeView === 'journeys-issues' && (
+          <JourneysAndIssuesHub
+            journeys={journeysList}
             issues={issues}
+            selectedJourneyId={selectedReportId}
+            onSelectJourney={(j) => setSelectedReportId(j?.id || j)}
             onRefresh={handleRefreshAll}
             onSelectIssue={(issue) => setSelectedIssue(issue)}
-            onViewOnMap={(issue) => {
+            onViewOnMap={(loc) => {
               setCurrentLocation({
-                lat: issue.latitude,
-                lon: issue.longitude,
+                lat: loc.latitude,
+                lon: loc.longitude,
                 speed: 0,
                 heading: 0,
-                accuracy: issue.locationAccuracyM || 5
+                accuracy: loc.locationAccuracyM || 5
               });
-              setActiveView('dashboard');
-              setStatusMessage(`Viewing defect #${issue.id} on map.`);
+              navigateTo('scanner');
+              setStatusMessage(`Viewing defect on map.`);
             }}
           />
         )}
 
-        {/* VIEW 3: Journey History View */}
-        {activeView === 'journeys' && (
-          <HistoryView
+        {/* VIEW 3: Government Reports Hub */}
+        {activeView === 'gov-reports' && (
+          <GovernmentReportsView
+            issues={issues}
             journeys={journeysList}
-            onRefresh={handleRefreshAll}
-            onInspectJourney={(j) => {
-              setSelectedReportId(j.id);
-              setActiveView('reports');
+            onNavigateToScanner={() => navigateTo('scanner')}
+            onSelectComplaint={(complaint) => {
+              // Complaint preview
             }}
           />
         )}
 
-        {/* VIEW 4: Journey Reports View (NEW) */}
-        {activeView === 'reports' && (
-          <JourneyReportsView
-            journeys={journeysList}
-            selectedJourneyId={selectedReportId}
-            onRefresh={handleRefreshAll}
-          />
-        )}
-
-        {/* VIEW 5: My Profile & Connected Services View */}
+        {/* VIEW 4: My Profile & Connected Services View */}
         {activeView === 'profile' && (
           <ProfileView
+            currentLocation={currentLocation}
             onProfileUpdated={(updated) => {
               if (updated.fullName) setRiderName(updated.fullName);
               if (updated.email) setRiderEmail(updated.email);
@@ -1354,7 +1580,7 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 6: Settings View */}
+        {/* VIEW 5: Settings View */}
         {activeView === 'settings' && (
           <SettingsView
             health={health}
