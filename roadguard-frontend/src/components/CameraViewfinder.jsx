@@ -375,16 +375,14 @@ export default function CameraViewfinder({
         const speed = latestLoc?.speed;
         const timestamp = latestLoc?.timestamp;
 
-        // Verify coordinate validity, freshness, and accuracy
+        // Verify coordinate validity and freshness
         const hasValidCoords = isValidCoordinate(rawLat, rawLon);
-        const isStale = isFixStale(timestamp, 30000); // 30-second stale limit
-        const isAccurate = accuracy != null && accuracy <= 50;
+        const isStale = isFixStale(timestamp, 60000); // 60-second stale limit
 
-        // When GPS is OFF, missing, stale, or coarse (>50m):
-        // Never assign false or coarse coordinates. Use null so backend flags as MANUAL_LOCATION_REQUIRED.
-        // Camera operation and AI inference remain completely independent of GPS.
-        const sanitizedLat = (hasValidCoords && !isStale && isAccurate) ? rawLat : null;
-        const sanitizedLon = (hasValidCoords && !isStale && isAccurate) ? rawLon : null;
+        // Accept valid browser coordinates even when accuracy is coarse (e.g. ±97m or ±149m).
+        // If GPS is OFF, missing, or stale, send null coordinates (GPS-independent mode).
+        const sanitizedLat = (hasValidCoords && !isStale) ? rawLat : null;
+        const sanitizedLon = (hasValidCoords && !isStale) ? rawLon : null;
 
         // Upload genuine frame to backend ONNX pipeline with verified telemetry
         const resp = await uploadEvidenceFrame(journeyId || null, file, {

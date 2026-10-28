@@ -170,6 +170,16 @@ export async function getJourney(id) {
   return res.json();
 }
 
+export async function deleteJourney(id) {
+  const res = await fetchWithTimeout(`${API_BASE}/journeys/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Failed to delete journey #${id}: HTTP ${res.status}`);
+  }
+  return true;
+}
+
 export async function sendGpsBatch(journeyId, points) {
   const res = await fetchWithTimeout(`${API_BASE}/journeys/${journeyId}/gps`, {
     method: 'POST',
@@ -436,6 +446,15 @@ export async function parseErrorResponse(res, fallbackMessage = 'Server request 
   }
 
   return message;
+}
+
+export async function listComplaints() {
+  const res = await fetchWithTimeout(`${API_BASE}/complaints`);
+  if (!res.ok) {
+    const errorMsg = await parseErrorResponse(res, 'Failed to fetch complaints list from server');
+    throw new Error(errorMsg);
+  }
+  return res.json();
 }
 
 /**

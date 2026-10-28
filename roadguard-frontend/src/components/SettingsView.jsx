@@ -1,365 +1,303 @@
 import React, { useState } from 'react';
 import {
   Settings,
-  Shield,
-  Camera,
+  Sun,
+  Moon,
+  Volume2,
+  VolumeX,
   MapPin,
-  Cpu,
-  Database,
-  Map,
-  Info,
+  Trash2,
   CheckCircle2,
-  AlertTriangle,
-  RotateCcw,
-  Sliders,
-  Eye
+  Shield,
+  RotateCcw
 } from 'lucide-react';
 
 export default function SettingsView({
-  health,
-  stats,
-  settings,
+  settings = {},
   onUpdateSettings,
   onResetSession
 }) {
   const [savedToast, setSavedToast] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
-  function handleChange(key, val) {
-    onUpdateSettings({ ...settings, [key]: val });
+  // Defaults:
+  // theme: 'DAYLIGHT' | 'DARK'
+  // autoCaptureAndChime: true | false
+  // autoGpsTracking: true | false
+  const currentTheme = settings.theme === 'DARK' ? 'DARK' : 'DAYLIGHT';
+  const autoCapture = settings.autoCaptureAndChime !== false;
+  const autoGps = settings.autoGpsTracking !== false;
+
+  function handleUpdate(key, value) {
+    const updated = { ...settings, [key]: value };
+    if (onUpdateSettings) onUpdateSettings(updated);
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 2000);
   }
 
+  function handleClearCache() {
+    try {
+      localStorage.removeItem('roadguard_settings');
+      localStorage.removeItem('roadguard_session_id');
+      sessionStorage.clear();
+    } catch (e) {
+      console.warn('Cache clear warning:', e);
+    }
+    if (onResetSession) onResetSession();
+    setResetConfirm(true);
+    setTimeout(() => setResetConfirm(false), 3000);
+  }
+
   return (
     <div style={{
-      maxWidth: '840px',
+      maxWidth: '760px',
       margin: '0 auto',
       width: '100%',
       display: 'flex',
       flexDirection: 'column',
       gap: '20px'
     }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Top Header Card */}
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '14px',
+        padding: '20px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: '16px'
+      }}>
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
-            System Settings & Telemetry Policies
-          </h2>
-          <p style={{ fontSize: '13px', color: '#94a3b8', margin: '4px 0 0' }}>
-            Configure recording thresholds, GPS road-eligibility policies, and AI inference parameters.
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              display: 'inline-flex',
+              padding: '6px',
+              borderRadius: '8px',
+              background: '#f1f5f9',
+              color: '#475569'
+            }}>
+              <Settings size={20} />
+            </span>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+              System Preferences
+            </h2>
+          </div>
+          <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
+            User interface display, notification chimes, and local cache controls.
           </p>
         </div>
+
         {savedToast && (
           <div style={{
-            background: 'rgba(0, 245, 160, 0.15)',
-            border: '1px solid #00f5a0',
-            color: '#00f5a0',
+            background: '#ecfdf5',
+            border: '1px solid #a7f3d0',
+            color: '#059669',
             padding: '6px 14px',
             borderRadius: '8px',
             fontSize: '12px',
+            fontWeight: 700,
             display: 'flex',
             alignItems: 'center',
             gap: '6px'
           }}>
-            <CheckCircle2 size={14} /> Preferences Saved
+            <CheckCircle2 size={14} /> Preference Saved
           </div>
         )}
       </div>
 
-      {/* 1. General Preferences */}
-      <div className="glass-panel" style={{ padding: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Sliders size={16} color="#00f5a0" /> General Preferences
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+      {/* 4 Simple Controls Grid */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+        {/* 1. Interface Color Theme */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px'
+        }}>
           <div>
-            <label style={{ fontSize: '12px', color: '#cbd5e1', display: 'block', marginBottom: '6px' }}>
-              Speed & Distance Units
-            </label>
-            <select
-              value={settings.units || 'METRIC'}
-              onChange={(e) => handleChange('units', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: '#090d16',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                borderRadius: '8px',
-                color: '#f8fafc',
-                fontSize: '13px'
-              }}
-            >
-              <option value="METRIC">Metric (km/h, meters)</option>
-              <option value="IMPERIAL">Imperial (mph, feet)</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ fontSize: '12px', color: '#cbd5e1', display: 'block', marginBottom: '6px' }}>
-              Interface Theme
-            </label>
-            <select
-              value={settings.theme || 'DARK'}
-              onChange={(e) => handleChange('theme', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: '#090d16',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                borderRadius: '8px',
-                color: '#f8fafc',
-                fontSize: '13px'
-              }}
-            >
-              <option value="DARK">Dark Slate (Default Fleet Mode)</option>
-              <option value="HIGH_CONTRAST">High Contrast (Bright Sunlight)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Camera & Drive Mode Recording */}
-      <div className="glass-panel" style={{ padding: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Camera size={16} color="#38bdf8" /> Camera & Drive Mode Recording Policy
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-            <div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>
-                Continuous Frame Sampling Interval: {settings.frameInterval || 2.8}s
-              </span>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0' }}>
-                Rate at which road images are captured and sent to ONNX inference pipeline.
-              </p>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+              Interface Color Theme
             </div>
-            <input
-              type="range"
-              min="1.5"
-              max="5.0"
-              step="0.5"
-              value={settings.frameInterval || 2.8}
-              onChange={(e) => handleChange('frameInterval', parseFloat(e.target.value))}
-              style={{ width: '160px', accentColor: '#00f5a0' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '12px' }}>
-            <div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>
-                Stationary Pause Grace Period: {settings.stationaryGraceSec || 10}s
-              </span>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0' }}>
-                Automatically pause capture when vehicle speed drops below 2 km/h for this duration.
-              </p>
-            </div>
-            <input
-              type="range"
-              min="5"
-              max="30"
-              step="5"
-              value={settings.stationaryGraceSec || 10}
-              onChange={(e) => handleChange('stationaryGraceSec', parseInt(e.target.value, 10))}
-              style={{ width: '160px', accentColor: '#38bdf8' }}
-            />
-          </div>
-
-          <div style={{
-            background: 'rgba(56, 189, 248, 0.08)',
-            border: '1px solid rgba(56, 189, 248, 0.25)',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            fontSize: '12px',
-            color: '#bae6fd',
-            lineHeight: 1.4
-          }}>
-            <strong>Browser Background Limitation Notice:</strong> Web browsers may throttle timers, camera frames, and GPS telemetry when a tab is in the background or the screen is locked. Keep the RoadGuard AI tab foregrounded during vehicle journeys for continuous monitoring.
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Location & Conservative Road Eligibility */}
-      <div className="glass-panel" style={{ padding: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <MapPin size={16} color="#f59e0b" /> Location & Road Eligibility State Machine
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-            <div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>
-                Maximum Acceptable GPS Uncertainty: {settings.maxGpsAccuracy || 25}m
-              </span>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0' }}>
-                If GPS accuracy exceeds this radius, state drops to GPS_ACCURACY_POOR and recording pauses.
-              </p>
-            </div>
-            <input
-              type="range"
-              min="10"
-              max="50"
-              step="5"
-              value={settings.maxGpsAccuracy || 25}
-              onChange={(e) => handleChange('maxGpsAccuracy', parseInt(e.target.value, 10))}
-              style={{ width: '160px', accentColor: '#f59e0b' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '12px' }}>
-            <div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>
-                Fail-Closed Road Eligibility Policy
-              </span>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0' }}>
-                Require confirmed road segment candidate before creating official defect records.
-              </p>
-            </div>
-            <span style={{
-              background: 'rgba(0, 245, 160, 0.15)',
-              color: '#00f5a0',
-              padding: '4px 10px',
-              borderRadius: '6px',
-              fontSize: '11px',
-              fontWeight: 700
-            }}>
-              ENABLED (STRICT)
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. AI Model & Inference Pipeline */}
-      <div className="glass-panel" style={{ padding: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Cpu size={16} color="#a855f7" /> AI Model & Inference Configuration
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-            <div style={{ background: '#090d16', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>MODEL ARCHITECTURE</span>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc', marginTop: '2px' }}>
-                YOLO11s ONNX (Road Damage)
-              </div>
-              <div style={{ fontSize: '11px', color: '#00f5a0', marginTop: '2px' }}>
-                Input: [1, 3, 640, 640] • FP32
-              </div>
-            </div>
-
-            <div style={{ background: '#090d16', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-              <span style={{ fontSize: '11px', color: '#64748b' }}>EXECUTION RUNTIME</span>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc', marginTop: '2px' }}>
-                Microsoft ONNX Runtime 1.17.1
-              </div>
-              <div style={{ fontSize: '11px', color: '#38bdf8', marginTop: '2px' }}>
-                Provider: CPUExecutionProvider
-              </div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+              Civic Daylight provides optimal outdoor daytime visibility without dashboard glare.
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-            <div>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#f1f5f9' }}>
-                Candidate Confidence Threshold: {((settings.confidenceThreshold || 0.25) * 100).toFixed(0)}%
-              </span>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0' }}>
-                Raw ONNX detections below this probability score are rejected prior to temporal clustering.
-              </p>
-            </div>
-            <input
-              type="range"
-              min="0.20"
-              max="0.65"
-              step="0.05"
-              value={settings.confidenceThreshold || 0.25}
-              onChange={(e) => handleChange('confidenceThreshold', parseFloat(e.target.value))}
-              style={{ width: '160px', accentColor: '#a855f7' }}
-            />
-          </div>
-
-          <div style={{
-            background: 'rgba(168, 85, 247, 0.08)',
-            border: '1px solid rgba(168, 85, 247, 0.25)',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            fontSize: '12px',
-            color: '#e9d5ff',
-            lineHeight: 1.4
-          }}>
-            <strong>Important Provenance Distinction:</strong> AI model confidence score reflects statistical classification probability in camera frames, not verified physical ground truth. A detection only becomes a confirmed issue after multi-pass temporal consistency and spatial clustering within 15 meters.
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Map & Tile Provider */}
-      <div className="glass-panel" style={{ padding: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Map size={16} color="#00f5a0" /> Geospatial Mapping Provider
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-            <span style={{ color: '#94a3b8' }}>Tile Provider:</span>
-            <strong style={{ color: '#f8fafc', wordBreak: 'break-word', textAlign: 'right' }}>OpenStreetMap Standard Raster (OSM Foundation)</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-            <span style={{ color: '#94a3b8' }}>Tile URL Template:</span>
-            <span style={{ fontFamily: 'monospace', color: '#00f5a0', fontSize: '12px', wordBreak: 'break-all', textAlign: 'right' }}>
-              https://tile.openstreetmap.org/{'{z}'}/{'{x}'}/{'{y}'}.png
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-            <span style={{ color: '#94a3b8' }}>Mandatory Attribution:</span>
-            <span style={{ color: '#cbd5e1', wordBreak: 'break-word', textAlign: 'right' }}>© OpenStreetMap contributors</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-            <span style={{ color: '#94a3b8' }}>Watermark Status:</span>
-            <span style={{ color: '#00f5a0', fontWeight: 600 }}>CLEAN (No Carto API-key watermark)</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 6. Storage & Diagnostics */}
-      <div className="glass-panel" style={{ padding: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Database size={16} color="#ec4899" /> Evidence Storage & Privacy
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-            <span style={{ color: '#94a3b8' }}>Local Storage Base Path:</span>
-            <span style={{ fontFamily: 'monospace', color: '#f8fafc', wordBreak: 'break-all' }}>./uploads/evidence</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-            <span style={{ color: '#94a3b8' }}>Integrity Verification:</span>
-            <span style={{ color: '#00f5a0' }}>SHA-256 Per-Frame Digest</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-            <span style={{ color: '#94a3b8' }}>PII Anonymization:</span>
-            <span style={{ color: '#cbd5e1' }}>License plate / dashboard edge blur enabled</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '12px' }}>
-            <div>
-              <span style={{ fontWeight: 600, color: '#f1f5f9' }}>Reset Local UI Cache</span>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0' }}>
-                Resets browser view states and telemetry tracking without deleting database records.
-              </p>
-            </div>
+          <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '4px', border: '1px solid #e2e8f0' }}>
             <button
-              onClick={onResetSession}
+              onClick={() => handleUpdate('theme', 'DAYLIGHT')}
               style={{
-                padding: '6px 14px',
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#ef4444',
+                padding: '8px 14px',
                 borderRadius: '6px',
                 fontSize: '12px',
-                fontWeight: 600,
+                fontWeight: 700,
+                border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                background: currentTheme === 'DAYLIGHT' ? '#ffffff' : 'transparent',
+                color: currentTheme === 'DAYLIGHT' ? '#2563eb' : '#64748b',
+                boxShadow: currentTheme === 'DAYLIGHT' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'
               }}
             >
-              <RotateCcw size={14} /> Reset Cache
+              <Sun size={14} /> Civic Daylight (Default)
+            </button>
+            <button
+              onClick={() => handleUpdate('theme', 'DARK')}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: currentTheme === 'DARK' ? '#0f172a' : 'transparent',
+                color: currentTheme === 'DARK' ? '#38bdf8' : '#64748b',
+                boxShadow: currentTheme === 'DARK' ? '0 1px 4px rgba(0,0,0,0.2)' : 'none'
+              }}
+            >
+              <Moon size={14} /> Night Drive
             </button>
           </div>
+        </div>
+
+        {/* 2. Auto-Capture Pothole Screenshot & Alert Chime */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px'
+        }}>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+              Auto-Capture Pothole Screenshot & Alert Chime
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+              Automatically capture high-resolution evidence thumbnails and chime upon defect detection.
+            </div>
+          </div>
+
+          <button
+            onClick={() => handleUpdate('autoCaptureAndChime', !autoCapture)}
+            style={{
+              padding: '8px 18px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: `1px solid ${autoCapture ? '#a7f3d0' : '#cbd5e1'}`,
+              background: autoCapture ? '#ecfdf5' : '#f8fafc',
+              color: autoCapture ? '#059669' : '#64748b',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            {autoCapture ? <Volume2 size={15} /> : <VolumeX size={15} />}
+            {autoCapture ? 'ENABLED (ON)' : 'MUTED (OFF)'}
+          </button>
+        </div>
+
+        {/* 3. Automatic GPS Location & Jurisdiction Tracking */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px'
+        }}>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+              Automatic GPS Location & Jurisdiction Tracking
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+              Automatically maintain road authority jurisdiction (NHAI / AP PWD / CDMA ULB) as you drive.
+            </div>
+          </div>
+
+          <button
+            onClick={() => handleUpdate('autoGpsTracking', !autoGps)}
+            style={{
+              padding: '8px 18px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: `1px solid ${autoGps ? '#bae6fd' : '#cbd5e1'}`,
+              background: autoGps ? '#f0f9ff' : '#f8fafc',
+              color: autoGps ? '#0284c7' : '#64748b',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <MapPin size={15} />
+            {autoGps ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}
+          </button>
+        </div>
+
+        {/* 4. Clear Local App Cache */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px'
+        }}>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+              Clear Local App Cache
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+              Reset locally cached sessions, offline buffers, and reload fresh government configurations.
+            </div>
+          </div>
+
+          <button
+            onClick={handleClearCache}
+            style={{
+              padding: '8px 18px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: '1px solid #fecaca',
+              background: '#fef2f2',
+              color: '#dc2626',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <RotateCcw size={14} />
+            {resetConfirm ? 'Cache Cleared!' : 'Clear Cached Data'}
+          </button>
         </div>
       </div>
     </div>

@@ -73,6 +73,9 @@ export default function DiagnosticPanel({
   } else if (gpsPermissionState === 'unavailable' || gpsStatus === 'GPS ERROR') {
     gpsStatusLabel = 'GPS ERROR';
     gpsColor = '#ef4444';
+  } else if (currentLocation?.isApproximate || (gpsStatus && gpsStatus.includes('APPROXIMATE'))) {
+    gpsStatusLabel = `APPROXIMATE (±${Math.round(currentLocation?.accuracy || 0)}m)`;
+    gpsColor = '#f59e0b';
   } else if (hasValidGps || gpsStatus === 'GPS ACTIVE') {
     if (isStale) {
       gpsStatusLabel = 'GPS ACTIVE (STALE)';

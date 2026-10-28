@@ -125,4 +125,10 @@ public class JourneyController {
             .collect(Collectors.toList());
         return ResponseEntity.ok(resp);
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteJourney(@PathVariable Long id) {
+        journeyService.deleteJourney(id);
+        return ResponseEntity.noContent().build();
+    }
 }
