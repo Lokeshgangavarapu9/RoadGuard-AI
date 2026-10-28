@@ -20,6 +20,7 @@ public class UserProfileService {
     private final UserProfileRepository profileRepository;
     private final ConnectedPortalRepository portalRepository;
     private final PortalRequirementsEngine requirementsEngine;
+    private final java.util.concurrent.ConcurrentMap<String, UserProfile> sessionProfiles = new java.util.concurrent.ConcurrentHashMap<>();
 
     public UserProfileService(
         UserProfileRepository profileRepository,
@@ -33,6 +34,14 @@ public class UserProfileService {
 
     @Transactional
     public UserProfile getProfile() {
+        return getProfile(null);
+    }
+
+    @Transactional
+    public UserProfile getProfile(String sessionId) {
+        if (sessionId != null && !sessionId.isBlank() && sessionProfiles.containsKey(sessionId)) {
+            return sessionProfiles.get(sessionId);
+        }
         UserProfile profile = profileRepository.findFirstByOrderByIdAsc().orElse(null);
         if (profile != null) {
             // Anti-mock guard: purge legacy seeded demo profile from database
@@ -68,13 +77,24 @@ public class UserProfileService {
             empty.setConsentDeviceLocation(true);
             empty.setConsentInspectionPhotos(true);
             empty.setCommunicationPreferences("");
+            if (sessionId != null && !sessionId.isBlank()) {
+                sessionProfiles.put(sessionId, empty);
+            }
             return empty;
+        }
+        if (sessionId != null && !sessionId.isBlank()) {
+            sessionProfiles.put(sessionId, profile);
         }
         return profile;
     }
 
     @Transactional
     public UserProfile updateProfile(UserProfile request) {
+        return updateProfile(null, request);
+    }
+
+    @Transactional
+    public UserProfile updateProfile(String sessionId, UserProfile request) {
         if (request == null) {
             throw new IllegalArgumentException("Profile request body cannot be null.");
         }
@@ -126,7 +146,11 @@ public class UserProfileService {
 
         log.info("Persisted genuine citizen profile for '{}' (State: {}, District: {})",
             existing.getFullName(), existing.getState(), existing.getDistrict());
-        return profileRepository.save(existing);
+        UserProfile saved = profileRepository.save(existing);
+        if (sessionId != null && !sessionId.isBlank()) {
+            sessionProfiles.put(sessionId, saved);
+        }
+        return saved;
     }
 
     @Transactional(readOnly = true)

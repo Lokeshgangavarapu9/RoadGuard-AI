@@ -82,6 +82,57 @@ export default function ProfileView({ onProfileUpdated, onNavigateToIssues }) {
 
   const normalizedVrn = normalizeVrn(profile.primaryVrn);
   const isVrnValid = normalizedVrn.length === 0 || /^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$/.test(normalizedVrn);
+  const [copiedPortalId, setCopiedPortalId] = useState(null);
+
+  function handleClearForm() {
+    setProfile({
+      fullName: '',
+      email: '',
+      phoneNumber: '',
+      preferredLanguage: 'English',
+      mobileVerified: false,
+      emailVerified: false,
+      address: '',
+      state: 'Andhra Pradesh',
+      district: '',
+      cityOrMunicipality: '',
+      ulbName: '',
+      wardNumber: '',
+      locality: '',
+      pinCode: '',
+      primaryVrn: '',
+      vehicleType: 'CAR',
+      additionalVehicles: '',
+      preferredNotificationChannel: 'SMS',
+      consentDeviceLocation: true,
+      consentInspectionPhotos: true,
+      communicationPreferences: ''
+    });
+  }
+
+  function handleCopyCitizenData(portal) {
+    const text = [
+      `--- ROADGUARD CITIZEN DETAILS FOR ${(portal.portalName || 'OFFICIAL PORTAL').toUpperCase()} ---`,
+      `Full Name: ${profile.fullName || 'N/A'}`,
+      `Mobile Phone: ${profile.phoneNumber || profile.phone || 'N/A'}`,
+      `Email: ${profile.email || 'N/A'}`,
+      `Vehicle Reg No (VRN): ${profile.primaryVrn || 'N/A'}`,
+      `Vehicle Type: ${profile.vehicleType || 'CAR'}`,
+      `State: ${profile.state || 'Andhra Pradesh'}`,
+      `District: ${profile.district || 'N/A'}`,
+      `City/ULB: ${profile.cityOrMunicipality || profile.ulbName || 'N/A'}`,
+      `Ward: ${profile.wardNumber || 'N/A'}`,
+      `PIN Code: ${profile.pinCode || 'N/A'}`,
+      `Address: ${profile.address || 'N/A'}`
+    ].join('\n');
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      const pId = portal.portalId || portal.id;
+      setCopiedPortalId(pId);
+      setTimeout(() => setCopiedPortalId(null), 3000);
+    }
+  }
 
   useEffect(() => {
     loadData();
@@ -513,14 +564,24 @@ export default function ProfileView({ onProfileUpdated, onNavigateToIssues }) {
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="btn-primary"
-                  style={{ alignSelf: 'flex-start', padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Personal Info'}
-                </button>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="btn-primary"
+                    style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Personal Info'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearForm}
+                    className="btn-secondary"
+                    style={{ padding: '10px 16px', fontSize: '13px' }}
+                  >
+                    Clear Form
+                  </button>
+                </div>
               </form>
             </div>
           )}
@@ -730,14 +791,24 @@ export default function ProfileView({ onProfileUpdated, onNavigateToIssues }) {
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="btn-primary"
-                  style={{ alignSelf: 'flex-start', padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Address & Jurisdiction'}
-                </button>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="btn-primary"
+                    style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Address & Jurisdiction'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearForm}
+                    className="btn-secondary"
+                    style={{ padding: '10px 16px', fontSize: '13px' }}
+                  >
+                    Clear Form
+                  </button>
+                </div>
               </form>
             </div>
           )}
@@ -853,14 +924,24 @@ export default function ProfileView({ onProfileUpdated, onNavigateToIssues }) {
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="btn-primary"
-                  style={{ alignSelf: 'flex-start', padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Preferences'}
-                </button>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="btn-primary"
+                    style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <Save size={15} /> {isSaving ? 'Saving Changes...' : 'Save Preferences'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearForm}
+                    className="btn-secondary"
+                    style={{ padding: '10px 16px', fontSize: '13px' }}
+                  >
+                    Clear Form
+                  </button>
+                </div>
               </form>
             </div>
           )}
@@ -905,6 +986,28 @@ export default function ProfileView({ onProfileUpdated, onNavigateToIssues }) {
                 }}>
                   {workerStatus.connected ? `Agent Active (${workerStatus.activeWorkerCount} worker)` : 'Agent Offline (Manual Handoff)'}
                 </span>
+              </div>
+
+              {/* Same-Origin Policy & Citizen OTP Security Notice */}
+              <div style={{
+                padding: '12px 16px',
+                backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                border: '1px solid rgba(56, 189, 248, 0.25)',
+                borderRadius: '10px',
+                fontSize: '12px',
+                color: '#cbd5e1',
+                lineHeight: 1.5,
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'flex-start'
+              }}>
+                <Info size={18} color="#38bdf8" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong style={{ color: '#38bdf8' }}>Same-Origin Policy & Citizen OTP Security Notice:</strong>
+                  <p style={{ margin: '4px 0 0' }}>
+                    Official government grievance portals (NHAI Rajmargyatra, AP CDMA / Puramithra, AP Mee Kosam) require live citizen mobile OTP and CAPTCHA authentication under statutory security rules. RoadGuard pre-validates all evidence files, defect coordinates, and civic jurisdiction data, and enables 1-click clipboard transfer for immediate official lodging.
+                  </p>
+                </div>
               </div>
 
               {/* Portal Notice Toast */}
@@ -993,15 +1096,27 @@ export default function ProfileView({ onProfileUpdated, onNavigateToIssues }) {
                         {portal.connectionNotes}
                       </div>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px' }}>
-                        <button
-                          onClick={() => handleRefreshPortal(pId)}
-                          disabled={isRefreshing}
-                          className="btn-secondary"
-                          style={{ padding: '6px 12px', fontSize: '11px' }}
-                        >
-                          <RefreshCw size={12} className={isRefreshing ? 'spin' : ''} /> Check Status
-                        </button>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleRefreshPortal(pId)}
+                            disabled={isRefreshing}
+                            className="btn-secondary"
+                            style={{ padding: '6px 12px', fontSize: '11px' }}
+                          >
+                            <RefreshCw size={12} className={isRefreshing ? 'spin' : ''} /> Check Status
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyCitizenData(portal)}
+                            className="btn-secondary"
+                            style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            title="Copy pre-formatted profile and jurisdiction data to clipboard for fast portal entry"
+                          >
+                            <FileText size={12} /> {copiedPortalId === pId ? 'Copied!' : '1-Click Copy'}
+                          </button>
+                        </div>
 
                         <a
                           href={portal.officialUrl}

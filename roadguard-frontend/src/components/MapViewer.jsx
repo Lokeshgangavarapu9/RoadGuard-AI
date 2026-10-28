@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import {
   AlertTriangle,
@@ -123,6 +123,7 @@ const ICONS = {
   WATERLOGGING: createMarkerIcon('#00b4d8', false),
   START: createMarkerIcon('#10b981', false, 'S'),
   END: createMarkerIcon('#ef4444', false, 'E'),
+  MANUAL: createMarkerIcon('#38bdf8', true, '📍'),
   DEFAULT: createMarkerIcon('#94a3b8', false),
 };
 
@@ -147,6 +148,24 @@ function MapController({ center, autoFollow, onUserPan, hasValidGps }) {
   return null;
 }
 
+// Map Click Handler for 3-tier Manual Pin Fallback
+function MapClickHandler({ onManualPinSelect }) {
+  useMapEvents({
+    click(e) {
+      if (onManualPinSelect && e?.latlng) {
+        onManualPinSelect({
+          lat: e.latlng.lat,
+          lon: e.latlng.lng,
+          timestamp: Date.now(),
+          accuracy: 5.0,
+          isManual: true
+        });
+      }
+    }
+  });
+  return null;
+}
+
 export default function MapViewer({
   currentLocation,
   isGpsEnabled = false,
@@ -155,7 +174,10 @@ export default function MapViewer({
   onSelectIssue,
   isJourneyActive = false,
   gpsError = null,
-  onRetryGps
+  onRetryGps,
+  manualLocation = null,
+  onManualPinSelect = null,
+  isManualMode = false
 }) {
   const hasValidGps = isGpsEnabled && currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon);
   const isStale = hasValidGps && isFixStale(currentLocation.timestamp, 20000);
@@ -163,7 +185,11 @@ export default function MapViewer({
 
   // Viewport center fallback (Corridor area), purely for map initialization
   const defaultCenter = [16.5062, 80.6480];
-  const center = hasValidGps ? [currentLocation.lat, currentLocation.lon] : defaultCenter;
+  const center = hasValidGps
+    ? [currentLocation.lat, currentLocation.lon]
+    : (manualLocation && isValidCoordinate(manualLocation.lat, manualLocation.lon)
+      ? [manualLocation.lat, manualLocation.lon]
+      : defaultCenter);
 
   const [autoFollow, setAutoFollow] = useState(true);
   const [_tileError, setTileError] = useState(false);
@@ -185,6 +211,8 @@ export default function MapViewer({
     setAutoFollow(true);
     if (hasValidGps && mapRef.current) {
       mapRef.current.setView([currentLocation.lat, currentLocation.lon], 16, { animate: true });
+    } else if (manualLocation && isValidCoordinate(manualLocation.lat, manualLocation.lon) && mapRef.current) {
+      mapRef.current.setView([manualLocation.lat, manualLocation.lon], 16, { animate: true });
     }
   }
 
@@ -212,6 +240,25 @@ export default function MapViewer({
           hasValidGps={hasValidGps}
           onUserPan={() => setAutoFollow(false)}
         />
+
+        <MapClickHandler onManualPinSelect={onManualPinSelect} />
+
+        {/* Manual Location Fallback Pin (when user clicks map) */}
+        {manualLocation && isValidCoordinate(manualLocation.lat, manualLocation.lon) && (
+          <Marker position={[manualLocation.lat, manualLocation.lon]} icon={ICONS.MANUAL}>
+            <Popup>
+              <div style={{ padding: '6px', fontSize: '12px' }}>
+                <strong style={{ color: '#38bdf8' }}>Manual Location Pin (Fallback)</strong>
+                <p style={{ margin: '4px 0 0', color: '#cbd5e1' }}>
+                  {manualLocation.lat.toFixed(5)}°N, {manualLocation.lon.toFixed(5)}°E
+                </p>
+                <div style={{ marginTop: '4px', fontSize: '10px', color: '#94a3b8' }}>
+                  Used for grievance lodging when GPS is unavailable.
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )}
 
         {/* GPS Breadcrumb Track Line */}
         {polylineCoords.length > 1 && (
