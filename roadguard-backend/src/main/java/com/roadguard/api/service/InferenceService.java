@@ -79,6 +79,52 @@ public class InferenceService {
         int frameSeq;
     }
 
+    public enum SupportedModelClass {
+        POTHOLE(0, "buraco", true),
+        LONGITUDINAL_CRACK(1, "trinca_longitudinal", true),
+        TRANSVERSE_CRACK(2, "trinca_transversal", true),
+        ALLIGATOR_CRACK(3, "trinca_malha", true),
+        UTILITY_COVER_NON_DEFECT(4, "tampa_bueiro", false);
+
+        private final int classId;
+        private final String label;
+        private final boolean roadDamage;
+
+        SupportedModelClass(int classId, String label, boolean roadDamage) {
+            this.classId = classId;
+            this.label = label;
+            this.roadDamage = roadDamage;
+        }
+
+        public int classId() { return classId; }
+        public String label() { return label; }
+        public boolean isRoadDamage() { return roadDamage; }
+
+        public static SupportedModelClass fromClassId(int id) {
+            for (SupportedModelClass c : values()) {
+                if (c.classId == id) return c;
+            }
+            return UTILITY_COVER_NON_DEFECT;
+        }
+    }
+
+    public record ParsedDetection(
+        SupportedModelClass modelClass,
+        double confidence,
+        double normX1,
+        double normY1,
+        double normX2,
+        double normY2,
+        boolean requiresHumanReview
+    ) {
+        public static ParsedDetection fromRaw(RawDetection raw) {
+            if (raw == null) return null;
+            SupportedModelClass mc = SupportedModelClass.fromClassId(raw.classId);
+            boolean review = raw.confidence < 0.65;
+            return new ParsedDetection(mc, raw.confidence, raw.x1, raw.y1, raw.x2, raw.y2, review);
+        }
+    }
+
     public static class RawDetection {
         public int classId;
         public String classLabel;

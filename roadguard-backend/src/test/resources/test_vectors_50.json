@@ -1,0 +1,2302 @@
+[
+  {
+    "vectorId": 0,
+    "inputs": {
+      "speedMps": 22.0,
+      "gpsAccuracyM": 8.0,
+      "sharpnessScore": 220.0,
+      "brightnessScore": 138.0,
+      "yoloConfidence": 0.88,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 60.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.6286,
+        0.04,
+        0.7333,
+        0.0049,
+        0.88,
+        1.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        2,
+        0,
+        2,
+        0,
+        3,
+        1,
+        0,
+        1
+      ],
+      "stateId": 1309,
+      "actionMask": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "selectedAction": "COMMIT_LOCAL_ONNX",
+      "selectedQValue": 12.3854
+    }
+  },
+  {
+    "vectorId": 1,
+    "inputs": {
+      "speedMps": 12.0,
+      "gpsAccuracyM": 15.0,
+      "sharpnessScore": 60.0,
+      "brightnessScore": 135.0,
+      "yoloConfidence": 0.75,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 100.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.3429,
+        0.075,
+        0.2,
+        0.0244,
+        0.75,
+        1.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        1,
+        0,
+        0,
+        0,
+        3,
+        1,
+        0,
+        1
+      ],
+      "stateId": 605,
+      "actionMask": [
+        true,
+        false,
+        false,
+        true
+      ],
+      "selectedAction": "BUFFER_AND_RESAMPLE_FAST",
+      "selectedQValue": 7.7905
+    }
+  },
+  {
+    "vectorId": 2,
+    "inputs": {
+      "speedMps": 10.0,
+      "gpsAccuracyM": 12.0,
+      "sharpnessScore": 190.0,
+      "brightnessScore": 25.0,
+      "yoloConfidence": 0.8,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 100.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2857,
+        0.06,
+        0.6333,
+        1.0,
+        0.8,
+        1.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        1,
+        3,
+        1,
+        0,
+        1
+      ],
+      "stateId": 765,
+      "actionMask": [
+        true,
+        false,
+        false,
+        true
+      ],
+      "selectedAction": "BUFFER_AND_RESAMPLE_FAST",
+      "selectedQValue": 7.6978
+    }
+  },
+  {
+    "vectorId": 3,
+    "inputs": {
+      "speedMps": 14.0,
+      "gpsAccuracyM": 10.0,
+      "sharpnessScore": 180.0,
+      "brightnessScore": 248.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 100.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4,
+        0.05,
+        0.6,
+        1.0,
+        0.85,
+        1.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        1,
+        3,
+        1,
+        0,
+        1
+      ],
+      "stateId": 765,
+      "actionMask": [
+        true,
+        false,
+        false,
+        true
+      ],
+      "selectedAction": "BUFFER_AND_RESAMPLE_FAST",
+      "selectedQValue": 7.6978
+    }
+  },
+  {
+    "vectorId": 4,
+    "inputs": {
+      "speedMps": 11.0,
+      "gpsAccuracyM": 9.0,
+      "sharpnessScore": 210.0,
+      "brightnessScore": 140.0,
+      "yoloConfidence": 0.9,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 80.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.3143,
+        0.045,
+        0.7,
+        0.0244,
+        0.9,
+        0.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        0,
+        3,
+        0,
+        0,
+        1
+      ],
+      "stateId": 729,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 5.8149
+    }
+  },
+  {
+    "vectorId": 5,
+    "inputs": {
+      "speedMps": 8.0,
+      "gpsAccuracyM": 14.0,
+      "sharpnessScore": 150.0,
+      "brightnessScore": 120.0,
+      "yoloConfidence": 0.28,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 90.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2286,
+        0.07,
+        0.5,
+        0.1707,
+        0.28,
+        1.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      "stateId": 645,
+      "actionMask": [
+        true,
+        false,
+        false,
+        true
+      ],
+      "selectedAction": "BUFFER_AND_RESAMPLE_FAST",
+      "selectedQValue": 7.652
+    }
+  },
+  {
+    "vectorId": 6,
+    "inputs": {
+      "speedMps": 11.5,
+      "gpsAccuracyM": 12.0,
+      "sharpnessScore": 175.0,
+      "brightnessScore": 130.0,
+      "yoloConfidence": 0.45,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 75.0,
+      "vlmQuotaRemaining": 8,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.3286,
+        0.06,
+        0.5833,
+        0.0732,
+        0.45,
+        1.0,
+        0.0,
+        0.5333
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "stateId": 717,
+      "actionMask": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "selectedAction": "ESCALATE_TO_CLOUD_VLM",
+      "selectedQValue": 9.1225
+    }
+  },
+  {
+    "vectorId": 7,
+    "inputs": {
+      "speedMps": 9.0,
+      "gpsAccuracyM": 8.0,
+      "sharpnessScore": 200.0,
+      "brightnessScore": 138.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 8.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2571,
+        0.04,
+        0.6667,
+        0.0049,
+        0.85,
+        1.0,
+        0.84,
+        0.6667
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        0,
+        3,
+        1,
+        1,
+        1
+      ],
+      "stateId": 735,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 6.0191
+    }
+  },
+  {
+    "vectorId": 8,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 10.0,
+      "sharpnessScore": 190.0,
+      "brightnessScore": 138.0,
+      "yoloConfidence": 0.55,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 100.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        0.05,
+        0.6333,
+        0.0049,
+        0.55,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        0,
+        2,
+        1,
+        0,
+        0
+      ],
+      "stateId": 724,
+      "actionMask": [
+        true,
+        true,
+        false,
+        true
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 9,
+    "inputs": {
+      "speedMps": 13.0,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 210.0,
+      "brightnessScore": 138.0,
+      "yoloConfidence": 0.82,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 100.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.3714,
+        0.745,
+        0.7,
+        0.0049,
+        0.82,
+        1.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        1,
+        1,
+        2,
+        0,
+        3,
+        1,
+        0,
+        1
+      ],
+      "stateId": 925,
+      "actionMask": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "selectedAction": "COMMIT_LOCAL_ONNX",
+      "selectedQValue": 14.795
+    }
+  },
+  {
+    "vectorId": 10,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 250.0,
+      "sharpnessScore": 210.0,
+      "brightnessScore": 138.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 100.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        1.0,
+        0.7,
+        0.0049,
+        0.85,
+        1.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        0,
+        2,
+        2,
+        0,
+        3,
+        1,
+        0,
+        1
+      ],
+      "stateId": 541,
+      "actionMask": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 11,
+    "inputs": {
+      "speedMps": 10.0,
+      "gpsAccuracyM": 10.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 138.0,
+      "yoloConfidence": 0.42,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 80.0,
+      "vlmQuotaRemaining": 10,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2857,
+        0.05,
+        0.5667,
+        0.0049,
+        0.42,
+        1.0,
+        0.0,
+        0.6667
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "stateId": 717,
+      "actionMask": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "selectedAction": "ESCALATE_TO_CLOUD_VLM",
+      "selectedQValue": 9.1225
+    }
+  },
+  {
+    "vectorId": 12,
+    "inputs": {
+      "speedMps": 25.0,
+      "gpsAccuracyM": 5.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 5.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.7143,
+        0.025,
+        0.1333,
+        0.6098,
+        0.34,
+        1.0,
+        0.9,
+        0.0667
+      ],
+      "binIndices": [
+        2,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "stateId": 1159,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 13,
+    "inputs": {
+      "speedMps": 1.5,
+      "gpsAccuracyM": 200.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 5.0,
+      "vlmQuotaRemaining": 15,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0429,
+        1.0,
+        0.5667,
+        0.6098,
+        0.85,
+        0.0,
+        0.9,
+        1.0
+      ],
+      "binIndices": [
+        0,
+        2,
+        2,
+        0,
+        3,
+        0,
+        1,
+        1
+      ],
+      "stateId": 539,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 14,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 20.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 245.0,
+      "yoloConfidence": 0.6,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        0.1,
+        0.1333,
+        1.0,
+        0.6,
+        0.0,
+        0.72,
+        0.3333
+      ],
+      "binIndices": [
+        0,
+        0,
+        0,
+        1,
+        2,
+        0,
+        1,
+        1
+      ],
+      "stateId": 51,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 15,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 5.0,
+      "sharpnessScore": 120.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 25.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        0.025,
+        0.4,
+        0.6098,
+        0.85,
+        0.0,
+        0.5,
+        0.0667
+      ],
+      "binIndices": [
+        1,
+        0,
+        1,
+        0,
+        3,
+        0,
+        0,
+        1
+      ],
+      "stateId": 665,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 5.407
+    }
+  },
+  {
+    "vectorId": 16,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 20.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 80.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 5.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        0.1,
+        0.1333,
+        0.561,
+        0.85,
+        0.0,
+        0.9,
+        0.0667
+      ],
+      "binIndices": [
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        1,
+        1
+      ],
+      "stateId": 27,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 17,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 200.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.45,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        1.0,
+        0.1333,
+        0.0,
+        0.45,
+        0.0,
+        0.72,
+        0.0
+      ],
+      "binIndices": [
+        1,
+        2,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0
+      ],
+      "stateId": 970,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 18,
+    "inputs": {
+      "speedMps": 8.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 84.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.6,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 120.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2286,
+        0.4,
+        0.28,
+        0.0,
+        0.6,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "binIndices": [
+        1,
+        1,
+        0,
+        0,
+        2,
+        1,
+        0,
+        0
+      ],
+      "stateId": 788,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 19,
+    "inputs": {
+      "speedMps": 25.0,
+      "gpsAccuracyM": 200.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.6,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.7143,
+        1.0,
+        0.5667,
+        0.0,
+        0.6,
+        1.0,
+        0.72,
+        0.0667
+      ],
+      "binIndices": [
+        2,
+        2,
+        2,
+        0,
+        2,
+        1,
+        1,
+        1
+      ],
+      "stateId": 1687,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 20,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 120.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.45,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 5.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        0.4,
+        0.4,
+        0.0,
+        0.45,
+        0.0,
+        0.9,
+        0.0667
+      ],
+      "binIndices": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "stateId": 843,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 3.1137
+    }
+  },
+  {
+    "vectorId": 21,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 84.0,
+      "brightnessScore": 20.0,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 60.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        0.4,
+        0.28,
+        1.0,
+        0.34,
+        1.0,
+        0.0,
+        0.0667
+      ],
+      "binIndices": [
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "stateId": 805,
+      "actionMask": [
+        true,
+        false,
+        false,
+        true
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.2543
+    }
+  },
+  {
+    "vectorId": 22,
+    "inputs": {
+      "speedMps": 8.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 120.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.6,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 5.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2286,
+        0.4,
+        0.4,
+        0.0,
+        0.6,
+        1.0,
+        0.9,
+        0.3333
+      ],
+      "binIndices": [
+        1,
+        1,
+        1,
+        0,
+        2,
+        1,
+        1,
+        1
+      ],
+      "stateId": 855,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 4.7059
+    }
+  },
+  {
+    "vectorId": 23,
+    "inputs": {
+      "speedMps": 8.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 20.0,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 25.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2286,
+        0.4,
+        0.5667,
+        1.0,
+        0.34,
+        1.0,
+        0.5,
+        0.3333
+      ],
+      "binIndices": [
+        1,
+        1,
+        2,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "stateId": 933,
+      "actionMask": [
+        true,
+        false,
+        false,
+        true
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 4.8549
+    }
+  },
+  {
+    "vectorId": 24,
+    "inputs": {
+      "speedMps": 25.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.6,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 120.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.7143,
+        0.4,
+        0.1333,
+        0.6098,
+        0.6,
+        0.0,
+        0.0,
+        0.0667
+      ],
+      "binIndices": [
+        2,
+        1,
+        0,
+        0,
+        2,
+        0,
+        0,
+        1
+      ],
+      "stateId": 1361,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 1.165
+    }
+  },
+  {
+    "vectorId": 25,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 5.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 245.0,
+      "yoloConfidence": 0.45,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        0.025,
+        0.5667,
+        1.0,
+        0.45,
+        0.0,
+        0.72,
+        0.3333
+      ],
+      "binIndices": [
+        0,
+        0,
+        2,
+        1,
+        1,
+        0,
+        1,
+        1
+      ],
+      "stateId": 171,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 26,
+    "inputs": {
+      "speedMps": 1.5,
+      "gpsAccuracyM": 5.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 245.0,
+      "yoloConfidence": 0.45,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0429,
+        0.025,
+        0.1333,
+        1.0,
+        0.45,
+        0.0,
+        0.72,
+        0.0
+      ],
+      "binIndices": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0
+      ],
+      "stateId": 42,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 27,
+    "inputs": {
+      "speedMps": 1.5,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 25.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0429,
+        0.745,
+        0.5667,
+        0.6098,
+        0.34,
+        1.0,
+        0.5,
+        0.3333
+      ],
+      "binIndices": [
+        0,
+        1,
+        2,
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      "stateId": 325,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 28,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 120.0,
+      "brightnessScore": 245.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 120.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        0.745,
+        0.4,
+        1.0,
+        0.85,
+        0.0,
+        0.0,
+        0.3333
+      ],
+      "binIndices": [
+        0,
+        1,
+        1,
+        1,
+        3,
+        0,
+        0,
+        1
+      ],
+      "stateId": 313,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 29,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 5.0,
+      "sharpnessScore": 260.0,
+      "brightnessScore": 80.0,
+      "yoloConfidence": 0.15,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 15,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        0.025,
+        0.8667,
+        0.561,
+        0.15,
+        1.0,
+        0.72,
+        1.0
+      ],
+      "binIndices": [
+        0,
+        0,
+        2,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "stateId": 135,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 30,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.15,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        0.745,
+        0.1333,
+        0.0,
+        0.15,
+        1.0,
+        0.72,
+        0.0
+      ],
+      "binIndices": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0
+      ],
+      "stateId": 198,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 31,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 200.0,
+      "sharpnessScore": 120.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.6,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 25.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        1.0,
+        0.4,
+        0.0,
+        0.6,
+        1.0,
+        0.5,
+        0.3333
+      ],
+      "binIndices": [
+        1,
+        2,
+        1,
+        0,
+        2,
+        1,
+        0,
+        1
+      ],
+      "stateId": 1045,
+      "actionMask": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "selectedAction": "ESCALATE_TO_CLOUD_VLM",
+      "selectedQValue": 10.5457
+    }
+  },
+  {
+    "vectorId": 32,
+    "inputs": {
+      "speedMps": 1.5,
+      "gpsAccuracyM": 200.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 20.0,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 15,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0429,
+        1.0,
+        0.1333,
+        1.0,
+        0.34,
+        0.0,
+        0.72,
+        1.0
+      ],
+      "binIndices": [
+        0,
+        2,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1
+      ],
+      "stateId": 419,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 33,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 5.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 20.0,
+      "yoloConfidence": 0.45,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 120.0,
+      "vlmQuotaRemaining": 15,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        0.025,
+        0.5667,
+        1.0,
+        0.45,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        1,
+        1,
+        0,
+        0,
+        1
+      ],
+      "stateId": 745,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 6.2431
+    }
+  },
+  {
+    "vectorId": 34,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 245.0,
+      "yoloConfidence": 0.45,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 60.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        0.4,
+        0.5667,
+        1.0,
+        0.45,
+        1.0,
+        0.0,
+        0.3333
+      ],
+      "binIndices": [
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "stateId": 941,
+      "actionMask": [
+        true,
+        false,
+        false,
+        true
+      ],
+      "selectedAction": "BUFFER_AND_RESAMPLE_FAST",
+      "selectedQValue": 6.4727
+    }
+  },
+  {
+    "vectorId": 35,
+    "inputs": {
+      "speedMps": 8.0,
+      "gpsAccuracyM": 5.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 80.0,
+      "yoloConfidence": 0.15,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 60.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2286,
+        0.025,
+        0.5667,
+        0.561,
+        0.15,
+        1.0,
+        0.0,
+        0.3333
+      ],
+      "binIndices": [
+        1,
+        0,
+        2,
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      "stateId": 709,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 6.331
+    }
+  },
+  {
+    "vectorId": 36,
+    "inputs": {
+      "speedMps": 1.5,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 260.0,
+      "brightnessScore": 80.0,
+      "yoloConfidence": 0.15,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 60.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0429,
+        0.745,
+        0.8667,
+        0.561,
+        0.15,
+        0.0,
+        0.0,
+        0.0667
+      ],
+      "binIndices": [
+        0,
+        1,
+        2,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "stateId": 321,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 37,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 200.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 5.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        1.0,
+        0.1333,
+        0.0,
+        0.34,
+        1.0,
+        0.9,
+        0.0667
+      ],
+      "binIndices": [
+        1,
+        2,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "stateId": 967,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 38,
+    "inputs": {
+      "speedMps": 25.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 120.0,
+      "brightnessScore": 80.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 120.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.7143,
+        0.4,
+        0.4,
+        0.561,
+        0.85,
+        0.0,
+        0.0,
+        0.3333
+      ],
+      "binIndices": [
+        2,
+        1,
+        1,
+        0,
+        3,
+        0,
+        0,
+        1
+      ],
+      "stateId": 1433,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.8249
+    }
+  },
+  {
+    "vectorId": 39,
+    "inputs": {
+      "speedMps": 25.0,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 84.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.7143,
+        0.745,
+        0.28,
+        0.6098,
+        0.34,
+        0.0,
+        0.72,
+        0.0
+      ],
+      "binIndices": [
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      "stateId": 1346,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 40,
+    "inputs": {
+      "speedMps": 8.0,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 84.0,
+      "brightnessScore": 245.0,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 5,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2286,
+        0.745,
+        0.28,
+        1.0,
+        0.34,
+        1.0,
+        0.72,
+        0.3333
+      ],
+      "binIndices": [
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "stateId": 807,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 41,
+    "inputs": {
+      "speedMps": 25.0,
+      "gpsAccuracyM": 200.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.6,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 120.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.7143,
+        1.0,
+        0.5667,
+        0.0,
+        0.6,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "binIndices": [
+        2,
+        2,
+        2,
+        0,
+        2,
+        1,
+        0,
+        0
+      ],
+      "stateId": 1684,
+      "actionMask": [
+        true,
+        true,
+        false,
+        true
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 42,
+    "inputs": {
+      "speedMps": 8.0,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 120.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 2
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2286,
+        0.745,
+        0.5667,
+        0.6098,
+        0.85,
+        0.0,
+        0.0,
+        0.0667
+      ],
+      "binIndices": [
+        1,
+        1,
+        2,
+        0,
+        3,
+        0,
+        0,
+        1
+      ],
+      "stateId": 921,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 5.2368
+    }
+  },
+  {
+    "vectorId": 43,
+    "inputs": {
+      "speedMps": 15.0,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.45,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 5.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.4286,
+        0.745,
+        0.5667,
+        0.0,
+        0.45,
+        1.0,
+        0.9,
+        0.0
+      ],
+      "binIndices": [
+        1,
+        1,
+        2,
+        0,
+        1,
+        1,
+        1,
+        0
+      ],
+      "stateId": 910,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 44,
+    "inputs": {
+      "speedMps": 1.5,
+      "gpsAccuracyM": 200.0,
+      "sharpnessScore": 84.0,
+      "brightnessScore": 80.0,
+      "yoloConfidence": 0.15,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 60.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0429,
+        1.0,
+        0.28,
+        0.561,
+        0.15,
+        1.0,
+        0.0,
+        0.0667
+      ],
+      "binIndices": [
+        0,
+        2,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      "stateId": 389,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 45,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 149.0,
+      "sharpnessScore": 84.0,
+      "brightnessScore": 20.0,
+      "yoloConfidence": 0.85,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        0.745,
+        0.28,
+        1.0,
+        0.85,
+        1.0,
+        0.72,
+        0.0
+      ],
+      "binIndices": [
+        0,
+        1,
+        0,
+        1,
+        3,
+        1,
+        1,
+        0
+      ],
+      "stateId": 254,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 46,
+    "inputs": {
+      "speedMps": 1.5,
+      "gpsAccuracyM": 20.0,
+      "sharpnessScore": 170.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.15,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 14.0,
+      "vlmQuotaRemaining": 15,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0429,
+        0.1,
+        0.5667,
+        0.6098,
+        0.15,
+        1.0,
+        0.72,
+        1.0
+      ],
+      "binIndices": [
+        0,
+        0,
+        2,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "stateId": 135,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 47,
+    "inputs": {
+      "speedMps": 8.0,
+      "gpsAccuracyM": 5.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.6,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 25.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.2286,
+        0.025,
+        0.1333,
+        0.6098,
+        0.6,
+        0.0,
+        0.5,
+        0.0667
+      ],
+      "binIndices": [
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        1
+      ],
+      "stateId": 593,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 5.727
+    }
+  },
+  {
+    "vectorId": 48,
+    "inputs": {
+      "speedMps": 0.0,
+      "gpsAccuracyM": 20.0,
+      "sharpnessScore": 120.0,
+      "brightnessScore": 200.0,
+      "yoloConfidence": 0.34,
+      "isRoadDamage": true,
+      "nearestIssueDistM": 5.0,
+      "vlmQuotaRemaining": 0,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 1
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.0,
+        0.1,
+        0.4,
+        0.6098,
+        0.34,
+        1.0,
+        0.9,
+        0.0
+      ],
+      "binIndices": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0
+      ],
+      "stateId": 70,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 0.0
+    }
+  },
+  {
+    "vectorId": 49,
+    "inputs": {
+      "speedMps": 25.0,
+      "gpsAccuracyM": 80.0,
+      "sharpnessScore": 40.0,
+      "brightnessScore": 137.5,
+      "yoloConfidence": 0.15,
+      "isRoadDamage": false,
+      "nearestIssueDistM": 25.0,
+      "vlmQuotaRemaining": 1,
+      "vlmQuotaMax": 15,
+      "currentResampleStreak": 0
+    },
+    "expected": {
+      "normalizedObservation": [
+        0.7143,
+        0.4,
+        0.1333,
+        0.0,
+        0.15,
+        0.0,
+        0.5,
+        0.0667
+      ],
+      "binIndices": [
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "stateId": 1345,
+      "actionMask": [
+        true,
+        false,
+        false,
+        false
+      ],
+      "selectedAction": "SKIP_FRAME",
+      "selectedQValue": 3.5071
+    }
+  }
+]

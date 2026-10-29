@@ -1,0 +1,75 @@
+{
+  "metadata": {
+    "environment": "RoadGuardInspectionEnv-v0",
+    "episodesEvaluated": 100,
+    "seedRange": [
+      10000,
+      10099
+    ],
+    "trainingEpisodes": 4000,
+    "trainingTimeSeconds": 600.06,
+    "timestampUtc": "2026-10-29T11:04:14Z"
+  },
+  "metricsByPolicy": {
+    "trained_rl_agent": {
+      "mean_episode_reward": 40.251,
+      "std_episode_reward": 28.41977302865031,
+      "total_true_positives": 613,
+      "total_false_positives": 18,
+      "total_missed_defects": 197,
+      "defect_precision": 0.9715,
+      "defect_recall": 0.7568,
+      "defect_f1": 0.8508,
+      "false_positive_rate_per_km": 0.0894,
+      "total_vlm_calls": 316,
+      "vlm_quota_utilization_pct": 21.07,
+      "vlm_calls_per_true_defect": 0.515,
+      "bandwidth_saved_pct": 96.61
+    },
+    "baseline_1_static_threshold": {
+      "mean_episode_reward": 18.872000000000003,
+      "std_episode_reward": 24.829168653017767,
+      "total_true_positives": 455,
+      "total_false_positives": 22,
+      "total_missed_defects": 346,
+      "defect_precision": 0.9539,
+      "defect_recall": 0.568,
+      "defect_f1": 0.7121,
+      "false_positive_rate_per_km": 0.1093,
+      "total_vlm_calls": 0,
+      "vlm_quota_utilization_pct": 0.0,
+      "vlm_calls_per_true_defect": 0.0,
+      "bandwidth_saved_pct": 100.0
+    },
+    "baseline_2_greedy_vlm": {
+      "mean_episode_reward": 26.950000000000003,
+      "std_episode_reward": 24.50331202103095,
+      "total_true_positives": 538,
+      "total_false_positives": 2,
+      "total_missed_defects": 263,
+      "defect_precision": 0.9963,
+      "defect_recall": 0.6717,
+      "defect_f1": 0.8024,
+      "false_positive_rate_per_km": 0.0099,
+      "total_vlm_calls": 671,
+      "vlm_quota_utilization_pct": 44.73,
+      "vlm_calls_per_true_defect": 1.247,
+      "bandwidth_saved_pct": 92.96
+    },
+    "baseline_3_naive_always_commit": {
+      "mean_episode_reward": 25.456999999999997,
+      "std_episode_reward": 30.736737806735444,
+      "total_true_positives": 571,
+      "total_false_positives": 101,
+      "total_missed_defects": 230,
+      "defect_precision": 0.8497,
+      "defect_recall": 0.7129,
+      "defect_f1": 0.7753,
+      "false_positive_rate_per_km": 0.5015,
+      "total_vlm_calls": 0,
+      "vlm_quota_utilization_pct": 0.0,
+      "vlm_calls_per_true_defect": 0.0,
+      "bandwidth_saved_pct": 100.0
+    }
+  }
+}

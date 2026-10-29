@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "roadguard-gym"
+version = "1.0.0"
+description = "Farama Gymnasium Environment for RoadGuard AI Inspection POMDP"
+readme = "README.md"
+authors = [{ name = "RoadGuard AI Team" }]
+requires-python = ">=3.11"
+dependencies = [
+    "gymnasium>=1.0.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["roadguard_env*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]

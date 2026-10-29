@@ -39,6 +39,37 @@ public class ImageQualityService {
         String rejectionReason
     ) {}
 
+    public record QualityAssessment(
+        String status,
+        boolean suitableForInference,
+        int width,
+        int height,
+        double sharpnessLaplacianVar,
+        double meanBrightness,
+        String sha256Hex,
+        String rejectionReason
+    ) {
+        public static QualityAssessment from(ImageQualityResult result) {
+            if (result == null) {
+                return new QualityAssessment("EMPTY", false, 0, 0, 0.0, 0.0, "", "Null result");
+            }
+            return new QualityAssessment(
+                result.qualityStatus(),
+                result.valid(),
+                result.width(),
+                result.height(),
+                result.sharpnessScore(),
+                result.brightnessScore(),
+                result.sha256Hex(),
+                result.rejectionReason()
+            );
+        }
+    }
+
+    public QualityAssessment assessImage(byte[] imageBytes) {
+        return QualityAssessment.from(evaluateQuality(imageBytes));
+    }
+
     /**
      * Inspects image bytes against magic headers, resolution, luminance, and blur.
      */
