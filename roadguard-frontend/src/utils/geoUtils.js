@@ -61,3 +61,16 @@ export function isFixStale(timestampMs, maxAgeMs = 20000) {
   if (!timestampMs || typeof timestampMs !== 'number') return true;
   return (Date.now() - timestampMs) > maxAgeMs;
 }
+
+/**
+ * Checks whether coordinates appear to be outside the primary expected operating region (Andhra Pradesh & connecting corridors).
+ * Primary operating corridor approx: Lat 12.5°N to 20.0°N, Lon 76.5°E to 85.0°E.
+ * Coordinates far from this region (e.g. Pakistan, North India, abroad) return true.
+ * Coordinates are NEVER rejected or overwritten; this is purely for a truthful non-blocking advisory.
+ */
+export function isOutsideExpectedRegion(lat, lon) {
+  if (!isValidCoordinate(lat, lon)) return false;
+  // Primary Andhra Pradesh corridor bounding box
+  const inExpectedRegion = lat >= 12.5 && lat <= 20.0 && lon >= 76.5 && lon <= 85.0;
+  return !inExpectedRegion;
+}

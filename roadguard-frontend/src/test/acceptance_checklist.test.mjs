@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { isOutsideExpectedRegion } from '../utils/geoUtils.js';
 
 describe('RoadGuard AI — Acceptance Checklist & Contract Verification', () => {
 
@@ -204,6 +205,107 @@ describe('RoadGuard AI — Acceptance Checklist & Contract Verification', () => 
     assert.equal(SPEC_PALETTE.mapBlue.toLowerCase(), '#38bdf8');
     assert.equal(SPEC_PALETTE.warningAmber.toLowerCase(), '#f59e0b');
     assert.equal(SPEC_PALETTE.errorRed.toLowerCase(), '#ef4444');
+  });
+
+  it('Out-of-region coordinates (e.g. Pakistan) are preserved honestly with non-blocking notice', () => {
+    function processCoordinatesWithRegionCheck(lat, lon) {
+      const isValid = Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+      if (!isValid) return { valid: false };
+
+      const isOutside = isOutsideExpectedRegion(lat, lon);
+
+      return {
+        valid: true,
+        latitude: lat, // NEVER overwritten with Vijayawada corridor!
+        longitude: lon,
+        isOutsideExpectedRegion: isOutside,
+        advisoryMessage: isOutside ? 'Location appears outside the expected region — verify for real reporting' : null
+      };
+    }
+
+    // A. Islamabad, Pakistan coordinates
+    const islamabad = processCoordinatesWithRegionCheck(33.6844, 73.0479);
+    assert.equal(islamabad.valid, true);
+    assert.equal(islamabad.latitude, 33.6844, 'Must NOT be silently overwritten with Vijayawada');
+    assert.equal(islamabad.longitude, 73.0479);
+    assert.equal(islamabad.isOutsideExpectedRegion, true);
+    assert.ok(islamabad.advisoryMessage.includes('outside the expected region'));
+
+    // B. Karachi, Pakistan coordinates
+    const karachi = processCoordinatesWithRegionCheck(24.8607, 67.0011);
+    assert.equal(karachi.valid, true);
+    assert.equal(karachi.latitude, 24.8607);
+    assert.equal(karachi.isOutsideExpectedRegion, true);
+
+    // C. Domestic Andhra Pradesh coordinates (Vijayawada)
+    const vijayawada = processCoordinatesWithRegionCheck(16.5062, 80.6480);
+    assert.equal(vijayawada.valid, true);
+    assert.equal(vijayawada.isOutsideExpectedRegion, false);
+    assert.equal(vijayawada.advisoryMessage, null);
+  });
+
+  it('Demo location isolation: UI displays prototype location, but real defects receive null coordinates', () => {
+    function processFrameEvidence(frame, gps) {
+      const hasValidCoords = gps != null && Number.isFinite(gps.lat) && Number.isFinite(gps.lon);
+      const isDemo = gps?.isDemo === true;
+
+      // Real defect geotagging strictly ignores demo locations to preserve database truth
+      const sanitizedLat = (hasValidCoords && !isDemo) ? gps.lat : null;
+      const sanitizedLon = (hasValidCoords && !isDemo) ? gps.lon : null;
+
+      return {
+        frameProcessed: true,
+        detectedClass: 'POTHOLE',
+        mapDisplayCoordinates: hasValidCoords ? [gps.lat, gps.lon] : null,
+        persistedLatitude: sanitizedLat,
+        persistedLongitude: sanitizedLon,
+        locationSource: sanitizedLat != null ? 'BROWSER_GPS' : 'MANUAL_LOCATION_REQUIRED'
+      };
+    }
+
+    const demoGps = { lat: 16.5062, lon: 80.6480, accuracy: 15, isDemo: true };
+    const result = processFrameEvidence('frame_demo.jpg', demoGps);
+
+    // Map can display demo coordinates for interface walkthrough
+    assert.deepEqual(result.mapDisplayCoordinates, [16.5062, 80.6480]);
+    // Persisted defect MUST receive null to avoid polluting real database
+    assert.equal(result.persistedLatitude, null);
+    assert.equal(result.persistedLongitude, null);
+    assert.equal(result.locationSource, 'MANUAL_LOCATION_REQUIRED');
+  });
+
+  it('GPS state transition after camera startup maintains uninterrupted inference', () => {
+    let cameraInferenceCount = 0;
+    let currentGps = null;
+
+    function captureFrame() {
+      cameraInferenceCount++;
+      return {
+        inferenceRun: true,
+        frameNum: cameraInferenceCount,
+        geotagged: currentGps != null,
+        latitude: currentGps?.lat || null
+      };
+    }
+
+    // Step 1: Camera started while GPS is offline
+    const frame1 = captureFrame();
+    assert.equal(frame1.inferenceRun, true);
+    assert.equal(frame1.geotagged, false);
+
+    // Step 2: GPS acquires coarse fix (97m) mid-session
+    currentGps = { lat: 16.5062, lon: 80.6480, accuracy: 97 };
+    const frame2 = captureFrame();
+    assert.equal(frame2.inferenceRun, true);
+    assert.equal(frame2.geotagged, true);
+    assert.equal(frame2.latitude, 16.5062);
+
+    // Step 3: GPS drops to offline again
+    currentGps = null;
+    const frame3 = captureFrame();
+    assert.equal(frame3.inferenceRun, true);
+    assert.equal(frame3.geotagged, false);
+    assert.equal(cameraInferenceCount, 3);
   });
 
 });

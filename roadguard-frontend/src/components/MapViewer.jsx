@@ -316,30 +316,38 @@ export default function MapViewer({
           />
         )}
 
-        {/* Current Vehicle Position Marker: ONLY rendered when a genuine GPS fix exists */}
+        {/* Current Vehicle Position Marker: rendered for genuine or demo location */}
         {hasValidGps && (
           <Marker
             position={[currentLocation.lat, currentLocation.lon]}
-            icon={createVehicleMarkerIcon(currentLocation.heading, isStale)}
+            icon={currentLocation.isDemo ? createMarkerIcon('#38bdf8', false, '🎯') : createVehicleMarkerIcon(currentLocation.heading, isStale)}
           >
             <Popup>
               <div style={{ padding: '6px', fontSize: '12px' }}>
-                <strong style={{ color: isStale ? '#f59e0b' : '#00f5a0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  {isStale && <Clock size={12} />}
-                  {isStale ? `Stale GPS Position (${fixAgeSec}s ago)` : 'Live Device Position'}
+                <strong style={{ color: currentLocation.isDemo ? '#38bdf8' : (isStale ? '#f59e0b' : '#00f5a0'), display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {currentLocation.isDemo ? '🎯 Demo Location — Not Live GPS' : (isStale && <Clock size={12} />)}
+                  {!currentLocation.isDemo && (isStale ? `Stale GPS Position (${fixAgeSec}s ago)` : 'Live Device Position')}
                 </strong>
                 <div style={{ marginTop: '4px', color: '#cbd5e1' }}>
                   <div>Lat: {currentLocation.lat.toFixed(5)}° | Lon: {currentLocation.lon.toFixed(5)}°</div>
-                  <div>Speed: {currentLocation.speed ? `${(currentLocation.speed * 3.6).toFixed(1)} km/h` : 'Stationary / 0 km/h'}</div>
-                  {currentLocation.accuracy && (
-                    <div style={{ color: currentLocation.accuracy > 25 ? '#f59e0b' : '#94a3b8' }}>
-                      GPS Accuracy: &plusmn;{currentLocation.accuracy.toFixed(0)}m
+                  {currentLocation.isDemo ? (
+                    <div style={{ color: '#38bdf8', fontSize: '11px', marginTop: '4px' }}>
+                      Prototype demonstration position (never attached to live defect evidence).
                     </div>
-                  )}
-                  {isStale && (
-                    <div style={{ marginTop: '4px', fontSize: '11px', color: '#f59e0b' }}>
-                      Position has not updated recently.
-                    </div>
+                  ) : (
+                    <>
+                      <div>Speed: {currentLocation.speed ? `${(currentLocation.speed * 3.6).toFixed(1)} km/h` : 'Stationary / 0 km/h'}</div>
+                      {currentLocation.accuracy && (
+                        <div style={{ color: currentLocation.accuracy > 25 ? '#f59e0b' : '#94a3b8' }}>
+                          GPS Accuracy: &plusmn;{currentLocation.accuracy.toFixed(0)}m
+                        </div>
+                      )}
+                      {isStale && (
+                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#f59e0b' }}>
+                          Position has not updated recently.
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

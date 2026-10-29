@@ -44,7 +44,7 @@ import {
   wakeUpBackend,
   getUserProfile
 } from './api';
-import { isValidCoordinate, haversineDistanceMeters } from './utils/geoUtils';
+import { isValidCoordinate, haversineDistanceMeters, isOutsideExpectedRegion } from './utils/geoUtils';
 
 // Section definition dictionary for RoadGuard AI desired product structure
 const SECTION_CONFIG = {
@@ -206,6 +206,7 @@ export default function App() {
   const [currentLocation, setCurrentLocation] = useState(null);
   const [coarseLocation, setCoarseLocation] = useState(null);
   const [manualLocation, setManualLocation] = useState(null);
+  const [isOutsideRegion, setIsOutsideRegion] = useState(false);
   const [isGpsEnabled, setIsGpsEnabled] = useState(false);
   const [gpsStatus, setGpsStatus] = useState('GPS OFF'); // 'GPS OFF' | 'GPS CONNECTING' | 'GPS ACTIVE' | 'GPS ERROR' | 'GPS PERMISSION DENIED'
   const [lastGpsFixTime, setLastGpsFixTime] = useState(null);
@@ -414,6 +415,9 @@ export default function App() {
             return;
           }
 
+          const isOutside = isOutsideExpectedRegion(lat, lon);
+          setIsOutsideRegion(isOutside);
+
           const pt = {
             lat,
             lon,
@@ -421,6 +425,8 @@ export default function App() {
             heading: pos.coords.heading != null && Number.isFinite(pos.coords.heading) ? pos.coords.heading : null,
             accuracy,
             isApproximate: isCoarse,
+            isOutsideRegion: isOutside,
+            isDemo: false,
             timestamp
           };
           currentLocationRef.current = pt;
@@ -519,6 +525,34 @@ export default function App() {
     setGpsErrorMessage(null);
     startGpsWatcher();
   }, [startGpsWatcher]);
+
+  // Demo Location action handler (Prototype testing without real GPS satellite lock)
+  const handleUseDemoLocation = useCallback(() => {
+    const demoPt = {
+      lat: 16.5062,
+      lon: 80.6480,
+      speed: 0,
+      heading: 0,
+      accuracy: 15.0,
+      isApproximate: true,
+      isDemo: true,
+      isOutsideRegion: false,
+      timestamp: Date.now()
+    };
+    currentLocationRef.current = demoPt;
+    setCurrentLocation(demoPt);
+    setIsOutsideRegion(false);
+    setGpsStatus('DEMO LOCATION (NOT LIVE GPS)');
+    setGpsErrorMessage(null);
+    setStatusMessage('Demo location active (Benz Circle, Vijayawada). Real defect evidence will not be geotagged with demo coordinates.');
+  }, []);
+
+  const handleClearDemoLocation = useCallback(() => {
+    currentLocationRef.current = null;
+    setCurrentLocation(null);
+    setGpsStatus(isGpsEnabled ? 'GPS CONNECTING' : 'GPS OFF');
+    setStatusMessage('Demo location cleared.');
+  }, [isGpsEnabled]);
 
   // 3. Elapsed time counter for active journey
   useEffect(() => {
@@ -1102,6 +1136,88 @@ export default function App() {
               </div>
             )}
 
+            {/* Out-of-region Non-Blocking Advisory (e.g. coordinates outside Indian operational territory) */}
+            {isOutsideRegion && currentLocation && !currentLocation.isDemo && (
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  background: 'rgba(245, 158, 11, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <AlertCircle size={20} color="#f59e0b" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#fef08a' }}>
+                    Location appears outside the expected region — verify for real reporting
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
+                    Coordinates: <strong>{currentLocation.lat.toFixed(4)}°, {currentLocation.lon.toFixed(4)}°</strong> &bull; Browser coordinates are preserved honestly as returned.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Explicit Prototype Demo Location Banner */}
+            {currentLocation?.isDemo && (
+              <div style={{
+                background: 'rgba(56, 189, 248, 0.12)',
+                border: '1px solid rgba(56, 189, 248, 0.4)',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    background: 'rgba(56, 189, 248, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <MapPin size={20} color="#38bdf8" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#38bdf8' }}>
+                      DEMO LOCATION ACTIVE — NOT LIVE GPS
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
+                      Displaying prototype coordinates for Vijayawada (16.5062°N, 80.6480°E).
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                      Camera inference continues, but genuine defect records will not be tagged with demo coordinates.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={handleClearDemoLocation}
+                  className="btn-secondary"
+                  style={{ padding: '6px 14px', fontSize: '12px', borderRadius: '6px' }}
+                >
+                  Clear Demo
+                </button>
+              </div>
+            )}
+
             {gpsPermissionState === 'denied' && (
               <div style={{
                 background: 'rgba(239, 68, 68, 0.12)',
@@ -1353,6 +1469,32 @@ export default function App() {
                   <Navigation size={14} style={{ transform: isGpsEnabled ? 'none' : 'rotate(45deg)' }} />
                   GPS: {isGpsEnabled ? 'ON' : 'OFF'}
                 </button>
+
+                {/* Optional Prototype Demo Location Toggle (Available when real satellite fix is not active) */}
+                {!isGpsEnabled && (
+                  <button
+                    type="button"
+                    onClick={currentLocation?.isDemo ? handleClearDemoLocation : handleUseDemoLocation}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: currentLocation?.isDemo ? 'rgba(245, 158, 11, 0.18)' : 'rgba(255, 255, 255, 0.06)',
+                      border: `1px solid ${currentLocation?.isDemo ? '#f59e0b' : 'rgba(148, 163, 184, 0.25)'}`,
+                      color: currentLocation?.isDemo ? '#f59e0b' : '#cbd5e1',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title="Toggle Demo location (Vijayawada) for interface walkthroughs without satellite lock"
+                  >
+                    <MapPin size={14} />
+                    {currentLocation?.isDemo ? 'Demo Active' : 'Use Demo Location'}
+                  </button>
+                )}
 
                 {/* Always Accessible Camera Toggle Control */}
                 <button
