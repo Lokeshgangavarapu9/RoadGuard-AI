@@ -473,6 +473,30 @@ export default function MapViewer({
           })}
       </MapContainer>
 
+      {/* Top Default Corridor Preview Banner when GPS is not active */}
+      {!hasValidGps && !hasValidCoarse && !manualLocation && (
+        <div style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          zIndex: 490,
+          background: 'rgba(15, 23, 42, 0.88)',
+          backdropFilter: 'blur(6px)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          borderRadius: '6px',
+          padding: '4px 10px',
+          fontSize: '11px',
+          color: '#cbd5e1',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+        }}>
+          <MapPin size={12} color="#38bdf8" />
+          <span>Default Map View: Vijayawada Corridor · Enable GPS or tap map to pin</span>
+        </div>
+      )}
+
       {/* Floating Recenter & Auto-Follow Button */}
       <div style={{
         position: 'absolute',
@@ -485,23 +509,25 @@ export default function MapViewer({
       }}>
         <button
           onClick={handleRecenter}
-          title={autoFollow ? 'Auto-follow active' : 'Recenter on my location'}
+          title={autoFollow ? 'Auto-follow active' : 'Recenter map'}
           style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            background: autoFollow ? '#00f5a0' : '#0f172a',
-            color: autoFollow ? '#04121d' : '#f8fafc',
-            border: `2px solid ${autoFollow ? '#00f5a0' : 'rgba(255, 255, 255, 0.2)'}`,
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+            padding: '8px 14px',
+            borderRadius: '24px',
+            background: autoFollow ? '#0d9488' : '#0f172a',
+            color: '#ffffff',
+            border: `1.5px solid ${autoFollow ? '#14b8a6' : 'rgba(255, 255, 255, 0.25)'}`,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            gap: '6px',
+            fontSize: '11px',
+            fontWeight: 700,
             cursor: 'pointer',
             transition: 'all 0.2s ease'
           }}
         >
-          <Crosshair size={20} />
+          <Crosshair size={14} />
+          <span>{hasValidGps ? (autoFollow ? 'Tracking Me' : 'Recenter on Me') : 'Pin Location Manually'}</span>
         </button>
       </div>
 

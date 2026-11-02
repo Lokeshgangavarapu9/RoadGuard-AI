@@ -21,7 +21,9 @@ import {
   ExternalLink,
   Eye,
   Building,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Sparkles,
+  Filter
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
@@ -30,6 +32,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { jsPDF } from 'jspdf';
 import { getJourney, getJourneyGps, getJourneyFrames, listIssues, deleteJourney } from '../api';
 import { isValidCoordinate } from '../utils/geoUtils';
+import { DEMO_SAMPLE_DEFECTS } from '../utils/demoScan';
 
 // 2D Map Marker generator
 function createReportIcon(color, symbol = '') {
@@ -78,9 +81,13 @@ export default function JourneysAndIssuesHub({
   onSelectIssue,
   onViewOnMap,
   onRefresh,
-  initialTab = 'journeys' // 'journeys' | 'defects'
+  initialTab = null // 'defects' | 'journeys'
 }) {
-  const [activeTab, setActiveTab] = useState(initialTab); // 'journeys' | 'defects'
+  // Default to defects if defects exist, otherwise journeys
+  const [activeTab, setActiveTab] = useState(() => {
+    if (initialTab) return initialTab;
+    return issues && issues.length > 0 ? 'defects' : 'journeys';
+  });
   const [inspectingId, setInspectingId] = useState(selectedJourneyId);
 
   // Single Journey Inspection State
@@ -93,6 +100,12 @@ export default function JourneysAndIssuesHub({
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [statusNotification, setStatusNotification] = useState(null);
+
+  // Auto-filter empty test runs (0 km / 0 defects)
+  const [hideEmptyTrips, setHideEmptyTrips] = useState(true);
+
+  // Local demo issues state if citizen wants to preview
+  const [demoIssues, setDemoIssues] = useState([]);
 
   // All Defects Filter State
   const [filterType, setFilterType] = useState('ALL');
@@ -149,52 +162,24 @@ export default function JourneysAndIssuesHub({
     };
   }, [inspectingId]);
 
-  // Handle Journey Deletion
-  async function handleDeleteJourney(e, id) {
-    e.stopPropagation();
-    setIsDeleting(true);
-    try {
-      await deleteJourney(id);
-      setStatusNotification(`Journey #${id} deleted successfully.`);
-      setTimeout(() => setStatusNotification(null), 3000);
-      if (inspectingId === id) {
-        setInspectingId(null);
-      }
-      setDeleteConfirmId(null);
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      console.error('Delete journey failed:', err);
-      setStatusNotification(`Failed to delete journey #${id}: ${err.message}`);
-      setTimeout(() => setStatusNotification(null), 4000);
-    } finally {
-      setIsDeleting(false);
-    }
-  }
-
-  // 3D MapLibre Initialization
+  // MapLibre GL 3D Map Rendering Lifecycle
   useEffect(() => {
     if (viewDimension !== '3D' || !maplibreglContainerRef.current) return;
 
     const validCoordinates = gpsPoints
-      .filter(p => isValidCoordinate(p.latitude, p.longitude))
+      .filter(p => p.longitude != null && p.latitude != null && isValidCoordinate(p.latitude, p.longitude))
       .map(p => [p.longitude, p.latitude]);
 
-    if (validCoordinates.length === 0) return;
-
-    if (maplibreglMapRef.current) {
-      maplibreglMapRef.current.remove();
-      maplibreglMapRef.current = null;
-    }
+    if (validCoordinates.length < 2) return;
 
     try {
-      const startCoord = validCoordinates[0];
       const map = new maplibregl.Map({
         container: maplibreglContainerRef.current,
-        style: 'https://tiles.openfreemap.org/styles/liberty',
-        center: startCoord,
-        zoom: 15.5,
+        style: 'https://demotiles.maplibre.org/style.json',
+        center: validCoordinates[0],
+        zoom: 14.5,
         pitch: 55,
-        bearing: -15
+        bearing: -17.6
       });
 
       map.addControl(new maplibregl.NavigationControl(), 'top-right');
@@ -295,12 +280,57 @@ export default function JourneysAndIssuesHub({
     doc.save(`RoadGuard_Journey_${journeyData.id}_Audit_Report.pdf`);
   }
 
-  // Filtered defects for the "All Detected Road Defects" sub-tab
-  const filteredIssues = issues.filter(iss => {
+  async function handleDeleteJourney(e, journeyId) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setIsDeleting(true);
+    try {
+      await deleteJourney(journeyId);
+      setStatusNotification(`Trip #${journeyId} deleted successfully.`);
+      setTimeout(() => setStatusNotification(null), 3000);
+      setDeleteConfirmId(null);
+      if (inspectingId === journeyId) setInspectingId(null);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Failed to delete journey:', err);
+      setStatusNotification(`Failed to delete trip #${journeyId}: ${err.message}`);
+      setTimeout(() => setStatusNotification(null), 4000);
+      setDeleteConfirmId(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  // Combined issues list including optional preview demo defects
+  const allIssues = [...issues, ...demoIssues];
+
+  // Filtered defects for the "Detected Potholes & Issues" sub-tab
+  const filteredIssues = allIssues.filter(iss => {
     if (filterType !== 'ALL' && iss.defectClass !== filterType) return false;
     if (filterStatus !== 'ALL' && iss.status !== filterStatus) return false;
     return true;
   });
+
+  // Filtered journeys (hiding empty runs if toggle is on)
+  const visibleJourneys = journeys.filter(j => {
+    if (hideEmptyTrips) {
+      const dist = j.distanceMeters || 0;
+      const defCount = j.potholesCount || j.defectsCount || 0;
+      if (dist < 10 && defCount === 0) return false;
+    }
+    return true;
+  });
+
+  // Stale active trip helper
+  function formatJourneyStatus(j) {
+    if (j.status === 'ACTIVE') {
+      const ageMs = Date.now() - new Date(j.startedAt || Date.now()).getTime();
+      if (ageMs > 30 * 60 * 1000) {
+        return { label: 'COMPLETED (Inactive)', color: '#64748b', bg: '#f1f5f9' };
+      }
+      return { label: 'RECORDING', color: '#059669', bg: '#ecfdf5' };
+    }
+    return { label: j.status || 'COMPLETED', color: '#64748b', bg: '#f1f5f9' };
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -311,11 +341,11 @@ export default function JourneysAndIssuesHub({
           top: '72px',
           right: '20px',
           zIndex: 1000,
-          background: '#102a43',
+          background: '#0f172a',
           color: '#ffffff',
           padding: '10px 18px',
           borderRadius: '10px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          boxShadow: 'var(--shadow-lg)',
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
@@ -323,18 +353,18 @@ export default function JourneysAndIssuesHub({
           fontWeight: 600,
           animation: 'fadeIn 0.2s ease'
         }}>
-          <CheckCircle2 size={16} color="#00f5a0" />
+          <CheckCircle2 size={16} color="var(--color-civic-teal, #0d9488)" />
           {statusNotification}
         </div>
       )}
 
-      {/* Top Segmented Switcher Hub Header */}
+      {/* Top Switcher Hub Header */}
       <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
+        background: 'var(--bg-card, #ffffff)',
+        border: '1px solid var(--border-subtle, #e2e8f0)',
         borderRadius: '14px',
         padding: '16px 20px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+        boxShadow: 'var(--shadow-sm)',
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
@@ -342,517 +372,358 @@ export default function JourneysAndIssuesHub({
         gap: '16px'
       }}>
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ color: '#243b53' }}>📍</span> Journeys & Road Issues
+          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main, #0f172a)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: 'var(--color-civic-teal, #0d9488)' }}>📍</span> My Trips & Road Issues
           </h2>
-          <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
-            Unified inspection hub: review route telemetry dossiers, 2D/3D map trails, and all detected road defects.
+          <p style={{ fontSize: '13px', color: 'var(--text-dim, #64748b)', margin: '4px 0 0' }}>
+            Review detected road hazards, browse recorded journey trails, and prepare statutory complaints.
           </p>
         </div>
 
-        {/* Segmented Control Switcher */}
+        {/* 2 Sub-Tabs */}
         <div style={{
           display: 'flex',
-          background: '#f1f5f9',
-          borderRadius: '10px',
+          background: 'var(--bg-tertiary, #f1f5f9)',
           padding: '4px',
-          border: '1px solid #e2e8f0'
+          borderRadius: '10px',
+          border: '1px solid var(--border-subtle, #e2e8f0)',
+          gap: '4px'
         }}>
           <button
-            onClick={() => { setActiveTab('journeys'); setInspectingId(null); }}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 700,
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: activeTab === 'journeys' && !inspectingId ? '#ffffff' : 'transparent',
-              color: activeTab === 'journeys' && !inspectingId ? '#243b53' : '#64748b',
-              boxShadow: activeTab === 'journeys' && !inspectingId ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <Car size={16} /> All Journeys & Route Maps ({journeys.length})
-          </button>
-          <button
+            type="button"
             onClick={() => { setActiveTab('defects'); setInspectingId(null); }}
             style={{
               padding: '8px 16px',
               borderRadius: '8px',
               fontSize: '13px',
               fontWeight: 700,
-              border: 'none',
               cursor: 'pointer',
+              border: 'none',
+              background: activeTab === 'defects' && !inspectingId ? 'var(--bg-card, #ffffff)' : 'transparent',
+              color: activeTab === 'defects' && !inspectingId ? 'var(--text-main, #0f172a)' : 'var(--text-dim, #64748b)',
+              boxShadow: activeTab === 'defects' && !inspectingId ? 'var(--shadow-sm)' : 'none',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              background: activeTab === 'defects' ? '#ffffff' : 'transparent',
-              color: activeTab === 'defects' ? '#243b53' : '#64748b',
-              boxShadow: activeTab === 'defects' ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-              transition: 'all 0.15s ease'
+              gap: '6px'
             }}
           >
-            <AlertTriangle size={16} color="#d97706" /> All Detected Road Defects ({issues.length})
+            <AlertTriangle size={15} color={activeTab === 'defects' && !inspectingId ? '#dc2626' : '#64748b'} />
+            Detected Potholes & Issues ({allIssues.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setActiveTab('journeys'); }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: 'none',
+              background: activeTab === 'journeys' && !inspectingId ? 'var(--bg-card, #ffffff)' : 'transparent',
+              color: activeTab === 'journeys' && !inspectingId ? 'var(--text-main, #0f172a)' : 'var(--text-dim, #64748b)',
+              boxShadow: activeTab === 'journeys' && !inspectingId ? 'var(--shadow-sm)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Car size={15} color={activeTab === 'journeys' && !inspectingId ? '#2563eb' : '#64748b'} />
+            Recorded Trips & Route Maps ({visibleJourneys.length})
           </button>
         </div>
       </div>
 
-      {/* SUB-SECTION 1: SINGLE JOURNEY 2D/3D INSPECTION VIEW */}
+      {/* SUB-SECTION 1: SINGLE JOURNEY INSPECTION VIEW (DOSSIER) */}
       {inspectingId && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Back Bar & Inspection Controls */}
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: '12px',
-            padding: '12px 18px'
-          }}>
+          {/* Back to List Navigation Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <button
               onClick={() => setInspectingId(null)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                background: '#f8fafc',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                color: '#334155',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
+              className="btn-secondary"
+              style={{ padding: '8px 16px', fontSize: '13px', minHeight: '36px' }}
             >
-              <ArrowLeft size={16} /> Back to All Journeys
+              <ArrowLeft size={16} /> Back to Trips List
             </button>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                Journey #{inspectingId} Dossier
-              </span>
-
-              {/* 2D / 3D Dimension Toggle */}
-              <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px', border: '1px solid #e2e8f0' }}>
-                <button
-                  onClick={() => setViewDimension('2D')}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: viewDimension === '2D' ? '#ffffff' : 'transparent',
-                    color: viewDimension === '2D' ? '#0284c7' : '#64748b',
-                    boxShadow: viewDimension === '2D' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'
-                  }}
-                >
-                  <Layers size={13} style={{ display: 'inline', marginRight: '4px' }} /> 2D Map
-                </button>
-                <button
-                  onClick={() => setViewDimension('3D')}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: viewDimension === '3D' ? '#ffffff' : 'transparent',
-                    color: viewDimension === '3D' ? '#243b53' : '#64748b',
-                    boxShadow: viewDimension === '3D' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'
-                  }}
-                >
-                  <Box size={13} style={{ display: 'inline', marginRight: '4px' }} /> 3D WebGL
-                </button>
-              </div>
-
-              {/* PDF Download Button */}
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={handleExportPDF}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 14px',
-                  background: '#102a43',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: '#ffffff',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
+                className="btn-primary"
+                style={{ padding: '8px 16px', fontSize: '13px', minHeight: '36px' }}
               >
-                <Download size={14} /> Export PDF
+                <Download size={15} /> Export Audit Dossier (PDF)
               </button>
             </div>
           </div>
 
           {isLoadingInspection ? (
-            <div style={{ padding: '60px', textAlign: 'center', background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-              <RefreshCw size={28} className="spin" color="#243b53" style={{ margin: '0 auto 10px' }} />
-              <p style={{ color: '#64748b', fontSize: '14px' }}>Loading route coordinates & defect evidence...</p>
+            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim, #64748b)' }}>
+              <RefreshCw size={28} className="spin-animation" style={{ margin: '0 auto 12px' }} />
+              <p>Loading journey telemetry, route points, and defect observations...</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1.2fr) minmax(300px, 1fr)', gap: '16px' }} className="inspection-split-grid">
-              {/* Map Column */}
-              <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', minHeight: '440px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                    {viewDimension === '3D' ? 'MapLibre 3D Extruded Trajectory' : 'OpenStreetMap 2D Route Trail'}
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>
-                    {gpsPoints.length} GPS Coordinates Logged
-                  </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Trip Metadata Header Card */}
+              <div style={{
+                background: 'var(--bg-card, #ffffff)',
+                border: '1px solid var(--border-subtle, #e2e8f0)',
+                borderRadius: '12px',
+                padding: '18px 22px',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '14px'
+              }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim, #64748b)', fontWeight: 600 }}>TRIP REFERENCE</span>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main, #0f172a)' }}>
+                    #{journeyData?.id || inspectingId}
+                  </div>
                 </div>
-
-                <div style={{ flex: 1, minHeight: '400px', position: 'relative' }}>
-                  {viewDimension === '3D' ? (
-                    gpsPoints.filter(p => isValidCoordinate(p.latitude, p.longitude)).length < 2 ? (
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        height: '100%',
-                        minHeight: '400px',
-                        padding: '40px 20px',
-                        textAlign: 'center',
-                        background: '#f8fafc',
-                        color: '#64748b'
-                      }}>
-                        <Box size={40} color="#94a3b8" style={{ marginBottom: '12px' }} />
-                        <h4 style={{ margin: '0 0 6px', color: '#102a43', fontSize: '15px', fontWeight: 800 }}>3D Route Trajectory Unavailable</h4>
-                        <p style={{ margin: 0, fontSize: '12px', maxWidth: '380px', lineHeight: 1.5 }}>
-                          Insufficient genuine GPS route points were recorded during this journey (Camera inference ran in GPS-independent mode). 3D lines are rendered strictly from real recorded coordinates.
-                        </p>
-                      </div>
-                    ) : (
-                      <div ref={maplibreglContainerRef} style={{ width: '100%', height: '100%', minHeight: '400px' }} />
-                    )
-                  ) : (
-                    <MapContainer
-                      center={gpsPoints.length > 0 && isValidCoordinate(gpsPoints[0].latitude, gpsPoints[0].longitude) ? [gpsPoints[0].latitude, gpsPoints[0].longitude] : [16.5062, 80.6480]}
-                      zoom={14}
-                      style={{ width: '100%', height: '100%', minHeight: '400px' }}
-                    >
-                      <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
-                      {gpsPoints.length > 1 && (
-                        <Polyline
-                          positions={gpsPoints.filter(p => isValidCoordinate(p.latitude, p.longitude)).map(p => [p.latitude, p.longitude])}
-                          pathOptions={{ color: '#0284c7', weight: 5, opacity: 0.9 }}
-                        />
-                      )}
-                      {gpsPoints.length > 0 && isValidCoordinate(gpsPoints[0].latitude, gpsPoints[0].longitude) && (
-                        <Marker position={[gpsPoints[0].latitude, gpsPoints[0].longitude]} icon={REPORT_ICONS.START}>
-                          <Popup>Departure: {new Date(gpsPoints[0].recordedAt).toLocaleTimeString()}</Popup>
-                        </Marker>
-                      )}
-                      {gpsPoints.length > 1 && isValidCoordinate(gpsPoints[gpsPoints.length - 1].latitude, gpsPoints[gpsPoints.length - 1].longitude) && (
-                        <Marker position={[gpsPoints[gpsPoints.length - 1].latitude, gpsPoints[gpsPoints.length - 1].longitude]} icon={REPORT_ICONS.END}>
-                          <Popup>Destination: {new Date(gpsPoints[gpsPoints.length - 1].recordedAt).toLocaleTimeString()}</Popup>
-                        </Marker>
-                      )}
-                      {journeyIssues.map(issue => (
-                        isValidCoordinate(issue.latitude, issue.longitude) && (
-                          <Marker key={issue.id} position={[issue.latitude, issue.longitude]} icon={REPORT_ICONS[issue.defectClass] || REPORT_ICONS.DEFAULT}>
-                            <Popup>
-                              <strong>{issue.defectClass?.replace('_', ' ')}</strong><br />
-                              Confidence: {((issue.confidenceScore || 0.85) * 100).toFixed(0)}%<br />
-                              Road: {issue.roadName || 'Public Road'}
-                            </Popup>
-                          </Marker>
-                        )
-                      ))}
-                    </MapContainer>
-                  )}
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim, #64748b)', fontWeight: 600 }}>VEHICLE & RIDER</span>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main, #0f172a)' }}>
+                    {journeyData?.vehicleType || 'CAR'} · {journeyData?.riderName || 'Anonymous'}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim, #64748b)', fontWeight: 600 }}>TOTAL DISTANCE</span>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-civic-teal, #0d9488)' }}>
+                    {((journeyData?.distanceMeters || 0) / 1000).toFixed(2)} km
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim, #64748b)', fontWeight: 600 }}>DEFECTS RECORDED</span>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#dc2626' }}>
+                    {journeyIssues.length} road hazards
+                  </div>
                 </div>
               </div>
 
-              {/* Defects in this Journey Column */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* 2D / 3D Route Map Selector */}
+              <div style={{
+                background: 'var(--bg-card, #ffffff)',
+                border: '1px solid var(--border-subtle, #e2e8f0)',
+                borderRadius: '12px',
+                overflow: 'hidden'
+              }}>
                 <div style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '12px',
-                  padding: '14px 18px',
+                  padding: '12px 18px',
+                  borderBottom: '1px solid var(--border-subtle, #e2e8f0)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
-                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>
-                    Defects Detected on This Trip ({journeyIssues.length})
-                  </span>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>
-                    {((journeyData?.distanceMeters || 0) / 1000).toFixed(2)} km monitored
-                  </span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-main, #0f172a)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <MapPin size={16} color="var(--color-civic-teal, #0d9488)" /> Route Telemetry Trail
+                  </strong>
+
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setViewDimension('2D')}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        border: 'none',
+                        background: viewDimension === '2D' ? 'var(--color-civic-teal, #0d9488)' : 'var(--bg-tertiary, #f1f5f9)',
+                        color: viewDimension === '2D' ? '#fff' : 'var(--text-dim, #64748b)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      2D Map (Leaflet)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewDimension('3D')}
+                      disabled={gpsPoints.length < 2}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        border: 'none',
+                        background: viewDimension === '3D' ? 'var(--color-civic-teal, #0d9488)' : 'var(--bg-tertiary, #f1f5f9)',
+                        color: viewDimension === '3D' ? '#fff' : 'var(--text-dim, #64748b)',
+                        cursor: gpsPoints.length < 2 ? 'not-allowed' : 'pointer',
+                        opacity: gpsPoints.length < 2 ? 0.6 : 1
+                      }}
+                    >
+                      3D Trail {gpsPoints.length < 2 ? '(Requires GPS Trail)' : '(MapLibre)'}
+                    </button>
+                  </div>
                 </div>
 
-                {journeyIssues.length === 0 ? (
-                  <div style={{ padding: '36px 20px', textAlign: 'center', background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', color: '#64748b' }}>
-                    <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 8px' }} />
-                    <h4 style={{ margin: 0, color: '#0f172a' }}>No Defects Detected</h4>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px' }}>Pavement condition was within acceptable safety criteria throughout this journey.</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '420px', overflowY: 'auto' }}>
-                    {journeyIssues.map(issue => (
-                      <div
-                        key={issue.id}
-                        style={{
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '10px',
-                          padding: '12px 14px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '12px'
-                        }}
+                <div style={{ height: '380px', position: 'relative' }}>
+                  {viewDimension === '2D' ? (
+                    gpsPoints.length > 0 ? (
+                      <MapContainer
+                        center={[gpsPoints[0].latitude, gpsPoints[0].longitude]}
+                        zoom={14}
+                        style={{ width: '100%', height: '100%' }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{
-                            width: '38px',
-                            height: '38px',
-                            borderRadius: '8px',
-                            background: issue.defectClass === 'POTHOLE' ? '#fef2f2' : '#fffbeb',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: issue.defectClass === 'POTHOLE' ? '#dc2626' : '#d97706',
-                            flexShrink: 0
-                          }}>
-                            <AlertTriangle size={20} />
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                              {issue.defectClass?.replace('_', ' ')}
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                              Conf: {((issue.confidenceScore || 0.85) * 100).toFixed(0)}% • {issue.roadName || 'Public Road'}
-                            </div>
-                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
-                              Coords: {issue.latitude?.toFixed(4)}°N, {issue.longitude?.toFixed(4)}°E
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => onSelectIssue && onSelectIssue(issue)}
-                          style={{
-                            padding: '6px 12px',
-                            background: '#0d9488',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <FileText size={12} /> Report
-                        </button>
+                        <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                        <Polyline
+                          positions={gpsPoints.map(p => [p.latitude, p.longitude])}
+                          pathOptions={{ color: '#0d9488', weight: 4 }}
+                        />
+                        {journeyIssues.map(iss => (
+                          <Marker
+                            key={iss.id}
+                            position={[iss.latitude, iss.longitude]}
+                            icon={REPORT_ICONS[iss.defectClass] || REPORT_ICONS.DEFAULT}
+                          >
+                            <Popup>
+                              <div>
+                                <strong>{iss.defectClass}</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '11px' }}>{iss.roadName}</p>
+                              </div>
+                            </Popup>
+                          </Marker>
+                        ))}
+                      </MapContainer>
+                    ) : (
+                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center', color: 'var(--text-dim, #64748b)', background: 'var(--bg-canvas, #f8fafc)' }}>
+                        <p style={{ maxWidth: '420px', margin: 0, fontSize: '13px', lineHeight: 1.5 }}>
+                          Insufficient genuine GPS route points were recorded during this journey (Camera inference ran in GPS-independent mode). 3D lines are rendered strictly from real recorded coordinates.
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    )
+                  ) : (
+                    gpsPoints.length >= 2 ? (
+                      <div ref={maplibreglContainerRef} style={{ width: '100%', height: '100%' }} />
+                    ) : (
+                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center', color: 'var(--text-dim, #64748b)', background: 'var(--bg-canvas, #f8fafc)' }}>
+                        <p style={{ maxWidth: '420px', margin: 0, fontSize: '13px', lineHeight: 1.5 }}>
+                          Insufficient genuine GPS route points were recorded during this journey (Camera inference ran in GPS-independent mode). 3D lines are rendered strictly from real recorded coordinates.
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* SUB-SECTION 2: ALL JOURNEYS FLASHCARDS VIEW */}
+      {/* SUB-SECTION 2: RECORDED TRIPS & ROUTE MAPS LIST */}
       {activeTab === 'journeys' && !inspectingId && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {journeys.length === 0 ? (
-            <div style={{ padding: '60px 20px', textAlign: 'center', background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', color: '#64748b' }}>
-              <Car size={44} color="#243b53" style={{ margin: '0 auto 12px' }} />
-              <h3 style={{ color: '#0f172a', margin: '0 0 6px', fontSize: '16px' }}>No Inspection Journeys Recorded</h3>
-              <p style={{ fontSize: '13px', maxWidth: '480px', margin: '0 auto' }}>
-                Mount your smartphone and click Start Driving Mode or Camera Scanner on the dashboard to automatically monitor roads and generate journey dossiers.
+          {/* Filter Bar */}
+          <div style={{
+            background: 'var(--bg-card, #ffffff)',
+            border: '1px solid var(--border-subtle, #e2e8f0)',
+            borderRadius: '10px',
+            padding: '10px 16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '12px'
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, color: 'var(--text-main, #0f172a)' }}>
+              <input
+                type="checkbox"
+                checked={hideEmptyTrips}
+                onChange={(e) => setHideEmptyTrips(e.target.checked)}
+                style={{ width: '16px', height: '16px', accentColor: 'var(--color-civic-teal, #0d9488)', cursor: 'pointer' }}
+              />
+              Hide empty test runs (0 km / 0 defects)
+            </label>
+
+            <span style={{ color: 'var(--text-dim, #64748b)' }}>
+              Showing {visibleJourneys.length} of {journeys.length} trips
+            </span>
+          </div>
+
+          {visibleJourneys.length === 0 ? (
+            <div style={{
+              background: 'var(--bg-card, #ffffff)',
+              border: '1px solid var(--border-subtle, #e2e8f0)',
+              borderRadius: '14px',
+              padding: '60px 20px',
+              textAlign: 'center',
+              color: 'var(--text-dim, #64748b)'
+            }}>
+              <Car size={40} color="var(--color-civic-teal, #0d9488)" style={{ margin: '0 auto 10px' }} />
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main, #0f172a)', margin: '0 0 4px' }}>
+                No Trips Recorded Yet
+              </h3>
+              <p style={{ fontSize: '13px', margin: 0 }}>
+                Start a road scan session to record GPS telemetry and inspect road defects.
               </p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
-              {journeys.map(j => {
-                const VehicleIcon = j.vehicleType === 'BIKE' ? Bike : (j.vehicleType === 'HEAVY' ? Truck : Car);
-                const distanceKm = ((j.distanceMeters || 0) / 1000).toFixed(2);
-                const isConfirmingDelete = deleteConfirmId === j.id;
-
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+              {visibleJourneys.map(j => {
+                const statusMeta = formatJourneyStatus(j);
                 return (
                   <div
                     key={j.id}
                     className="glass-card"
                     style={{
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '12px',
                       padding: '16px',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '12px',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
-                      position: 'relative'
+                      borderRadius: '12px'
                     }}
                   >
-                    {/* Top Row: Car Icon & Journey ID */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{
-                          width: '38px',
-                          height: '38px',
-                          borderRadius: '8px',
-                          background: '#eef2ff',
-                          color: '#243b53',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <VehicleIcon size={20} />
-                        </div>
-                        <div>
-                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>
-                            Journey #{j.id}
-                          </h4>
-                          <span style={{ fontSize: '11px', color: '#64748b' }}>
-                            {j.riderName || 'Inspection Run'}
-                          </span>
-                        </div>
-                      </div>
-
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-main, #0f172a)' }}>
+                        Trip #{j.id}
+                      </span>
                       <span style={{
-                        fontSize: '11px',
+                        fontSize: '10px',
                         fontWeight: 700,
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        background: j.status === 'ACTIVE' ? '#ecfdf5' : '#f1f5f9',
-                        color: j.status === 'ACTIVE' ? '#059669' : '#475569'
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        background: statusMeta.bg,
+                        color: statusMeta.color
                       }}>
-                        {j.status || 'STOPPED'}
+                        {statusMeta.label}
                       </span>
                     </div>
 
-                    {/* Stats Strip */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Distance</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{distanceKm} km</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Frames</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{j.totalFrames || 0}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Defects</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: (j.issuesCount || 0) > 0 ? '#dc2626' : '#059669' }}>
-                          {j.issuesCount || 0}
-                        </div>
-                      </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted, #334155)' }}>
+                      <span>Vehicle: <strong>{j.vehicleType || 'CAR'}</strong></span>
+                      <span>Distance: <strong>{((j.distanceMeters || 0) / 1000).toFixed(2)} km</strong></span>
                     </div>
 
-                    {/* Timestamp */}
-                    <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Clock size={12} />
-                      {new Date(j.startedAt || j.createdAt || Date.now()).toLocaleString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-dim, #64748b)' }}>
+                      <span>Started: {new Date(j.startedAt || Date.now()).toLocaleTimeString()}</span>
+                      <span style={{ color: (j.potholesCount || j.defectsCount) > 0 ? '#dc2626' : 'inherit', fontWeight: 700 }}>
+                        {j.potholesCount || j.defectsCount || 0} defects found
+                      </span>
                     </div>
 
-                    {/* Footer Actions: Open Dossier & Dustbin Delete */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '4px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                       <button
-                        onClick={() => { setInspectingId(j.id); if (onSelectJourney) onSelectJourney(j.id); }}
+                        type="button"
+                        onClick={() => { setInspectingId(j.id); }}
+                        className="btn-primary"
+                        style={{ flex: 1, padding: '7px 12px', fontSize: '12px', minHeight: '34px' }}
+                      >
+                        Inspect Dossier &rarr;
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmId(j.id)}
+                        aria-label={`Delete trip #${j.id}`}
                         style={{
-                          flex: 1,
-                          padding: '8px 12px',
-                          background: '#eef2ff',
-                          color: '#243b53',
-                          border: '1px solid #c7d2fe',
+                          padding: '7px 10px',
+                          background: '#fef2f2',
+                          color: '#ef4444',
+                          border: '1px solid #fecaca',
                           borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px'
+                          cursor: 'pointer'
                         }}
                       >
-                        <Eye size={14} /> Open Journey & Issues (2D/3D)
+                        <Trash2 size={15} />
                       </button>
-
-                      {isConfirmingDelete ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <button
-                            onClick={(e) => handleDeleteJourney(e, j.id)}
-                            disabled={isDeleting}
-                            style={{
-                              padding: '6px 10px',
-                              background: '#dc2626',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }}
-                            style={{
-                              padding: '6px 8px',
-                              background: '#f1f5f9',
-                              color: '#475569',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '11px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(j.id); }}
-                          title="Delete journey"
-                          aria-label={`Delete journey #${j.id}`}
-                          style={{
-                            padding: '8px',
-                            background: '#fef2f2',
-                            color: '#ef4444',
-                            border: '1px solid #fecaca',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
@@ -862,34 +733,34 @@ export default function JourneysAndIssuesHub({
         </div>
       )}
 
-      {/* SUB-SECTION 3: ALL DETECTED ROAD DEFECTS VIEW */}
-      {activeTab === 'defects' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Defect Class & Status Filter Bar */}
+      {/* SUB-SECTION 3: DETECTED POTHOLES & ISSUES LIST */}
+      {activeTab === 'defects' && !inspectingId && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Defect Filter Bar */}
           <div style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: '12px',
-            padding: '12px 18px',
+            background: 'var(--bg-card, #ffffff)',
+            border: '1px solid var(--border-subtle, #e2e8f0)',
+            borderRadius: '10px',
+            padding: '10px 16px',
             display: 'flex',
             flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '12px'
+            gap: '10px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <SlidersHorizontal size={16} color="#64748b" />
+              <Filter size={15} color="var(--text-dim, #64748b)" />
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
                 style={{
-                  padding: '7px 12px',
-                  background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '8px',
-                  color: '#0f172a',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-subtle, #e2e8f0)',
+                  background: 'var(--bg-canvas, #f8fafc)',
                   fontSize: '12px',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  color: 'var(--text-main, #0f172a)'
                 }}
               >
                 <option value="ALL">All Defect Classes</option>
@@ -897,145 +768,154 @@ export default function JourneysAndIssuesHub({
                 <option value="ALLIGATOR_CRACK">Alligator Cracks</option>
                 <option value="TRANSVERSE_CRACK">Transverse Cracks</option>
                 <option value="ROAD_CRACK">Road Cracks</option>
-                <option value="WATERLOGGING">Waterlogging</option>
               </select>
 
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
                 style={{
-                  padding: '7px 12px',
-                  background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '8px',
-                  color: '#0f172a',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-subtle, #e2e8f0)',
+                  background: 'var(--bg-canvas, #f8fafc)',
                   fontSize: '12px',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  color: 'var(--text-main, #0f172a)'
                 }}
               >
                 <option value="ALL">All Statuses</option>
                 <option value="DETECTED">Detected</option>
-                <option value="INVESTIGATING">Investigating</option>
                 <option value="COMPLAINT_DRAFTED">Complaint Drafted</option>
-                <option value="COMPLAINT_SUBMITTED">Complaint Submitted</option>
-                <option value="RESOLVED">Resolved</option>
+                <option value="SUBMITTED">Submitted</option>
               </select>
             </div>
 
-            <span style={{ fontSize: '12px', color: '#64748b' }}>
-              Showing {filteredIssues.length} of {issues.length} detected defects
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {demoIssues.length === 0 && issues.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDemoIssues(DEMO_SAMPLE_DEFECTS)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    background: 'rgba(13, 148, 136, 0.1)',
+                    border: '1px solid var(--color-civic-teal, #0d9488)',
+                    color: 'var(--color-civic-teal, #0d9488)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Sparkles size={12} /> Load Sample Vijayawada Detections (Demo)
+                </button>
+              )}
+              <span style={{ fontSize: '12px', color: 'var(--text-dim, #64748b)' }}>
+                Showing {filteredIssues.length} road hazards
+              </span>
+            </div>
           </div>
 
           {filteredIssues.length === 0 ? (
-            <div style={{ padding: '60px 20px', textAlign: 'center', background: '#ffffff', borderRadius: '14px', border: '1px solid #e2e8f0', color: '#64748b' }}>
-              <AlertTriangle size={44} color="#d97706" style={{ margin: '0 auto 12px' }} />
-              <h3 style={{ color: '#0f172a', margin: '0 0 6px', fontSize: '16px' }}>No Road Defects Found</h3>
-              <p style={{ fontSize: '13px', maxWidth: '480px', margin: '0 auto' }}>
-                No defects matched your filter criteria. Start the live camera scanner to identify road hazards automatically.
+            <div style={{
+              background: 'var(--bg-card, #ffffff)',
+              border: '1px solid var(--border-subtle, #e2e8f0)',
+              borderRadius: '14px',
+              padding: '60px 20px',
+              textAlign: 'center',
+              color: 'var(--text-dim, #64748b)'
+            }}>
+              <AlertTriangle size={40} color="#d97706" style={{ margin: '0 auto 10px' }} />
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main, #0f172a)', margin: '0 0 6px' }}>
+                No Road Hazards Recorded
+              </h3>
+              <p style={{ fontSize: '13px', margin: '0 0 16px', maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto' }}>
+                No defects matched your filter. Start a live road scan or load sample Vijayawada detections to test the complaint workflow.
               </p>
+              <button
+                type="button"
+                onClick={() => setDemoIssues(DEMO_SAMPLE_DEFECTS)}
+                className="btn-primary"
+                style={{ padding: '8px 18px', fontSize: '12px' }}
+              >
+                <Sparkles size={14} /> Load Sample Vijayawada Detections (Demo)
+              </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
               {filteredIssues.map(issue => (
                 <div
                   key={issue.id}
                   className="glass-card"
                   style={{
-                    background: '#ffffff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
                     padding: '16px',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '12px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                    borderRadius: '12px'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{
                       fontSize: '11px',
                       fontWeight: 700,
                       padding: '3px 8px',
                       borderRadius: '6px',
                       background: issue.defectClass === 'POTHOLE' ? '#fef2f2' : '#fffbeb',
-                      color: issue.defectClass === 'POTHOLE' ? '#dc2626' : '#d97706',
-                      textTransform: 'uppercase'
+                      color: issue.defectClass === 'POTHOLE' ? '#dc2626' : '#d97706'
                     }}>
                       {issue.defectClass?.replace('_', ' ')}
                     </span>
-                    <span style={{ fontSize: '11px', color: '#64748b' }}>
-                      Conf: {((issue.confidenceScore || 0.85) * 100).toFixed(0)}%
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim, #64748b)' }}>
+                      AI Confidence: {((issue.confidenceScore || 0.88) * 100).toFixed(0)}%
                     </span>
                   </div>
 
                   <div>
-                    <h4 style={{ margin: '0 0 4px', fontSize: '14px', color: '#0f172a', fontWeight: 700 }}>
+                    <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: 'var(--text-main, #0f172a)' }}>
                       {issue.roadName || 'Public Roadway'}
                     </h4>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
-                      {issue.address || `${issue.latitude?.toFixed(5)}°N, ${issue.longitude?.toFixed(5)}°E`}
+                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-dim, #64748b)' }}>
+                      {issue.latitude != null && issue.longitude != null
+                        ? `${issue.latitude.toFixed(5)}°N, ${issue.longitude.toFixed(5)}°E`
+                        : 'Unlocated (Manual Pin Required)'}
                     </p>
                   </div>
 
                   <div style={{
                     padding: '8px 10px',
-                    background: '#f8fafc',
-                    borderRadius: '8px',
-                    border: '1px solid #f1f5f9',
+                    borderRadius: '6px',
+                    background: 'var(--bg-canvas, #f8fafc)',
+                    border: '1px solid var(--border-subtle, #e2e8f0)',
                     fontSize: '11px',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center'
                   }}>
-                    <span style={{ color: '#475569' }}>
-                      Authority: <strong>{issue.authorityCode || 'NHAI'}</strong>
-                    </span>
-                    <span style={{ color: issue.dlpApplicable ? '#059669' : '#64748b', fontWeight: 600 }}>
-                      {issue.dlpApplicable ? '✓ Active DLP Warranty' : 'Standard Maintenance'}
-                    </span>
+                    <span>Jurisdiction: <strong>{issue.authorityCode || 'NHAI / Municipal'}</strong></span>
+                    {issue.isDemo && (
+                      <span style={{ fontWeight: 700, color: '#2563eb' }}>DEMO SAMPLE</span>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                     <button
+                      type="button"
                       onClick={() => onViewOnMap && onViewOnMap(issue)}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        background: '#f8fafc',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: '8px',
-                        color: '#334155',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px'
-                      }}
+                      className="btn-secondary"
+                      style={{ flex: 1, padding: '8px 10px', fontSize: '12px', minHeight: '34px' }}
                     >
                       <MapPin size={13} color="#2563eb" /> View on Map
                     </button>
                     <button
+                      type="button"
                       onClick={() => onSelectIssue && onSelectIssue(issue)}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        background: '#0d9488',
-                        border: 'none',
-                        borderRadius: '8px',
-                        color: '#ffffff',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px'
-                      }}
+                      className="btn-primary"
+                      style={{ flex: 1.2, padding: '8px 12px', fontSize: '12px', minHeight: '34px' }}
                     >
-                      <FileText size={13} /> Report
+                      <FileText size={13} /> Prepare Complaint &rarr;
                     </button>
                   </div>
                 </div>
@@ -1044,7 +924,57 @@ export default function JourneysAndIssuesHub({
           )}
         </div>
       )}
+
+      {/* Journey Deletion Confirmation Modal */}
+      {deleteConfirmId && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(6px)',
+          zIndex: 2200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card, #ffffff)',
+            borderRadius: '14px',
+            padding: '24px',
+            maxWidth: '420px',
+            width: '100%',
+            boxShadow: 'var(--shadow-lg)',
+            border: '1px solid var(--border-subtle, #e2e8f0)'
+          }}>
+            <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main, #0f172a)', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={18} color="#ef4444" /> Delete Trip #{deleteConfirmId}?
+            </h4>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted, #334155)', margin: '0 0 18px', lineHeight: 1.5 }}>
+              Are you sure you want to delete this trip record? All recorded GPS coordinates, speed telemetry, and trip summaries will be permanently removed.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmId(null)}
+                className="btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '12px' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteJourney(null, deleteConfirmId)}
+                disabled={isDeleting}
+                className="btn-danger"
+                style={{ padding: '8px 16px', fontSize: '12px' }}
+              >
+                {isDeleting ? 'Deleting...' : 'Yes, Delete Trip'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

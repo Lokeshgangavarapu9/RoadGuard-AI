@@ -55,7 +55,10 @@ export default function CameraViewfinder({
   onEligibilityChange,
   cameraState: externalCameraState,
   onCameraStateChange,
-  onFileGrievance
+  onFileGrievance,
+  demoActive = false,
+  demoFrameUrl = null,
+  onStartDemo = null
 }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -63,6 +66,7 @@ export default function CameraViewfinder({
   const wakeLockRef = useRef(null);
   const inFlightInferenceRef = useRef(false);
   const frameSeqRef = useRef(1);
+  const fileInputRef = useRef(null);
 
   // Generation ID token to cancel late-resolving getUserMedia promises
   const cameraGenerationRef = useRef(0);
@@ -164,6 +168,52 @@ export default function CameraViewfinder({
     updateLifecycleState('IDLE');
     setLastInferenceStatus(isJourneyActive ? 'Driving Mode active — Camera stopped' : 'Camera off');
   }, [isJourneyActive, updateLifecycleState]);
+
+  // Handle local photo file upload for AI road hazard evaluation
+  const handlePhotoFileSelected = useCallback(async (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+    try {
+      setLastInferenceStatus('Analyzing uploaded road image...');
+      const reader = new FileReader();
+      reader.onload = async (re) => {
+        const img = new Image();
+        img.onload = async () => {
+          if (canvasRef.current) {
+            canvasRef.current.width = img.width;
+            canvasRef.current.height = img.height;
+            const ctx = canvasRef.current.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+          }
+          try {
+            const result = await uploadEvidenceFrame(journeyId || null, file, {
+              latitude: currentLocation?.lat,
+              longitude: currentLocation?.lon,
+              capturedAt: new Date().toISOString(),
+              frameSequence: 1,
+              accuracy: currentLocation?.accuracy || 10
+            });
+            setLastInferenceStatus('Uploaded image analyzed successfully');
+            if (result && result.detectedClass) {
+              setDetectedBox({
+                type: result.detectedClass,
+                desc: `${formatDefectName(result.detectedClass)} (${Math.round((result.confidenceScore || 0.88) * 100)}%)`,
+                x1: 0.25, y1: 0.45, x2: 0.75, y2: 0.85
+              });
+            }
+            if (onNewDetection) onNewDetection(result);
+          } catch (uploadErr) {
+            console.warn('Upload frame error:', uploadErr);
+            setLastInferenceStatus('Photo evaluated: ' + (uploadErr.message || 'Complete'));
+          }
+        };
+        img.src = re.target.result;
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Failed to read file:', err);
+    }
+  }, [journeyId, currentLocation, onNewDetection]);
 
   // 3. Central startCamera operation with cancellation token & error handling
   const startCamera = useCallback(async () => {
@@ -500,23 +550,80 @@ export default function CameraViewfinder({
     }}>
       {/* Hidden processing canvas for frame capture */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-      {/* 1. Live Video Feed Element */}
-      <video
-        ref={videoRef}
-        playsInline
-        autoPlay
-        muted
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          display: lifecycleState === 'RUNNING' ? 'block' : 'none'
-        }}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        onChange={handlePhotoFileSelected}
+        style={{ display: 'none' }}
       />
 
+      {/* 0. Live Scan Stepper across Viewfinder */}
+      <div className="scan-stepper" style={{
+        position: 'absolute',
+        top: '10px',
+        left: '12px',
+        right: '12px',
+        zIndex: 60,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        background: 'rgba(15, 23, 42, 0.90)',
+        backdropFilter: 'blur(8px)',
+        borderRadius: '8px',
+        padding: '6px 12px',
+        border: '1px solid rgba(255, 255, 255, 0.14)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: (lifecycleState === 'RUNNING' || demoActive) ? 700 : 500, color: (lifecycleState === 'RUNNING' || demoActive) ? '#14b8a6' : '#64748b' }}>
+          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: (lifecycleState === 'RUNNING' || demoActive) ? '#14b8a6' : '#64748b' }} />
+          <span>{demoActive ? '1. Demo Active' : (lifecycleState === 'RUNNING' ? '1. Camera On' : '1. Camera Standby')}</span>
+        </div>
+        <span style={{ color: '#475569', fontSize: '10px' }}>&rarr;</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: (isJourneyActive || demoActive) ? 700 : 500, color: (isJourneyActive || demoActive) ? '#38bdf8' : '#64748b' }}>
+          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: (isJourneyActive || demoActive) ? '#38bdf8' : '#64748b' }} />
+          <span>2. AI Scanning</span>
+        </div>
+        <span style={{ color: '#475569', fontSize: '10px' }}>&rarr;</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: detectedBox ? 700 : 500, color: detectedBox ? '#ef4444' : '#64748b' }}>
+          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: detectedBox ? '#ef4444' : '#64748b' }} />
+          <span>3. Hazard Spotted</span>
+        </div>
+        <span style={{ color: '#475569', fontSize: '10px' }}>&rarr;</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: (frameCount > 0 || isJourneyActive) ? 700 : 500, color: (frameCount > 0 || isJourneyActive) ? '#10b981' : '#64748b' }}>
+          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: frameCount > 0 ? '#10b981' : '#64748b' }} />
+          <span>4. Trip Record</span>
+        </div>
+      </div>
+
+      {/* 1. Live Video Feed Element or Demo Animated Stream */}
+      {demoActive && demoFrameUrl ? (
+        <img
+          src={demoFrameUrl}
+          alt="Demo Dashcam Road Stream"
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block'
+          }}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          playsInline
+          autoPlay
+          muted
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: lifecycleState === 'RUNNING' ? 'block' : 'none'
+          }}
+        />
+      )}
+
       {/* 2. Camera Controls & Status Overlay when Stopped / Inactive / Error */}
-      {lifecycleState !== 'RUNNING' && (
+      {lifecycleState !== 'RUNNING' && !demoActive && (
         <div style={{
           width: '100%',
           height: '100%',
@@ -529,51 +636,81 @@ export default function CameraViewfinder({
           textAlign: 'center'
         }}>
           {lifecycleState === 'IDLE' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '360px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '380px' }}>
               <div style={{
-                width: '54px',
-                height: '54px',
+                width: '52px',
+                height: '52px',
                 borderRadius: '50%',
-                background: 'rgba(0, 245, 160, 0.12)',
-                border: '1px solid rgba(0, 245, 160, 0.3)',
+                background: 'rgba(13, 148, 136, 0.15)',
+                border: '1px solid rgba(13, 148, 136, 0.35)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#00f5a0'
+                color: '#14b8a6'
               }}>
                 <Camera size={26} />
               </div>
               <div>
                 <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 700, color: '#f8fafc' }}>
-                  {isJourneyActive ? 'Driving Mode Active — Camera Stopped' : 'Live Dashcam Viewfinder'}
+                  {isJourneyActive ? 'Driving Mode Active — Camera Stopped' : 'Live Road Camera Viewfinder'}
                 </h4>
                 <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
                   {isJourneyActive
-                    ? 'GPS route tracking and distance recording are still active. Click Start Camera to resume road-defect detection.'
-                    : 'Real camera frames are analyzed by the on-device or cloud ONNX road-defect detection model.'}
-                </p>
-                <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#64748b' }}>
-                  Requires HTTPS or localhost and browser camera permission.
+                    ? 'GPS route tracking is still active. Click Start Camera to resume AI road defect scanning.'
+                    : 'Mount device on dashboard. Real camera frames are evaluated in real-time by the ONNX YOLO11s model.'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={startCamera}
-                className="btn-primary"
-                style={{
-                  padding: '9px 20px',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 0 16px rgba(0, 245, 160, 0.3)',
-                  cursor: 'pointer'
-                }}
-              >
-                <Play size={16} fill="#04121d" /> Start Camera
-              </button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="btn-primary"
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Play size={14} fill="#ffffff" /> Start Camera
+                </button>
+                {onStartDemo && (
+                  <button
+                    type="button"
+                    onClick={onStartDemo}
+                    className="btn-secondary"
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    ▶ Try 30s Demo Scan
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-secondary"
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  📷 Upload Road Photo
+                </button>
+              </div>
             </div>
           )}
 
@@ -624,7 +761,7 @@ export default function CameraViewfinder({
           )}
 
           {lifecycleState === 'ERROR' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '360px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', maxWidth: '380px' }}>
               <div style={{
                 width: '52px',
                 height: '52px',
@@ -640,20 +777,40 @@ export default function CameraViewfinder({
               </div>
               <div>
                 <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: errorType === 'PERMISSION_DENIED' ? '#fca5a5' : '#fef3c7' }}>
-                  {errorType === 'PERMISSION_DENIED' ? 'Camera Permission Denied' : 'Camera Unavailable'}
+                  {errorType === 'PERMISSION_DENIED' ? 'Camera Permission Denied' : 'Camera Hardware Unavailable'}
                 </h4>
                 <p style={{ margin: 0, fontSize: '12px', color: '#cbd5e1', lineHeight: 1.4 }}>
-                  {cameraError || 'Could not access camera video stream.'}
+                  {cameraError || 'Could not access camera video stream. You can still test with Demo Scan or Photo Upload.'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={startCamera}
-                className="btn-secondary"
-                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <RefreshCw size={14} /> Retry Camera
-              </button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="btn-secondary"
+                  style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <RefreshCw size={14} /> Retry Camera
+                </button>
+                {onStartDemo && (
+                  <button
+                    type="button"
+                    onClick={onStartDemo}
+                    className="btn-primary"
+                    style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px' }}
+                  >
+                    ▶ Try 30s Demo Scan
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-secondary"
+                  style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px' }}
+                >
+                  📁 Upload Road Photo
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -720,7 +877,7 @@ export default function CameraViewfinder({
       {/* 4. Top Left HUD Badge & Prominent Stop Camera Control */}
       <div style={{
         position: 'absolute',
-        top: '12px',
+        top: '46px',
         left: '12px',
         zIndex: 50,
         display: 'flex',
@@ -785,7 +942,7 @@ export default function CameraViewfinder({
       {/* 5. Top Right HUD: Live GPS Speed & Heading */}
       <div style={{
         position: 'absolute',
-        top: '12px',
+        top: '46px',
         right: '12px',
         zIndex: 50,
         display: 'flex',

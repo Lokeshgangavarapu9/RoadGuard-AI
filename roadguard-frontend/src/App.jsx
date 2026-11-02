@@ -21,7 +21,14 @@ import {
   ChevronLeft,
   ChevronRight,
   UserCheck,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  HelpCircle,
+  Sparkles,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  Cpu,
+  X
 } from 'lucide-react';
 import MapViewer from './components/MapViewer';
 import CameraViewfinder from './components/CameraViewfinder';
@@ -44,7 +51,13 @@ import {
   wakeUpBackend,
   getUserProfile
 } from './api';
-import { isValidCoordinate, haversineDistanceMeters, isOutsideExpectedRegion } from './utils/geoUtils';
+import { isValidCoordinate, haversineDistanceMeters, isOutsideExpectedRegion, formatCoordinate } from './utils/geoUtils';
+import {
+  startDemoScanSession,
+  DEMO_SAMPLE_DEFECTS,
+  DEMO_SAMPLE_JOURNEY,
+  DEMO_SAMPLE_COMPLAINT
+} from './utils/demoScan';
 
 // Section definition dictionary for RoadGuard AI desired product structure
 const SECTION_CONFIG = {
@@ -220,6 +233,23 @@ export default function App() {
 
   // Concurrency guard ref to prevent duplicate journey creation from repeated clicks
   const isStartingJourneyRef = React.useRef(false);
+
+  // Interactive 30-Second Demo Scan Simulation State
+  const [demoActive, setDemoActive] = useState(false);
+  const [demoSecondsRemaining, setDemoSecondsRemaining] = useState(30);
+  const [demoFrameUrl, setDemoFrameUrl] = useState(null);
+  const demoSessionCancelRef = useRef(null);
+
+  // Dismissible Welcome Banner & Post-Trip Summary Modal
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('roadguard_welcome_dismissed') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+  const [postTripSummary, setPostTripSummary] = useState(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Configurable Settings State with localStorage persistence
   const [settings, setSettings] = useState(() => {
@@ -746,6 +776,126 @@ export default function App() {
     }
   }
 
+  // Interactive 30-Second Demo Scan Session
+  const handleStartDemoScan = useCallback(() => {
+    if (demoSessionCancelRef.current) {
+      demoSessionCancelRef.current();
+    }
+    setDemoActive(true);
+    setDemoSecondsRemaining(30);
+    setStatusMessage('Interactive 30s Demo Scan running along NH-65 Benz Circle, Vijayawada...');
+    navigateTo('scanner');
+
+    const cancelFn = startDemoScanSession({
+      onTick: ({ secondsRemaining, elapsedSeconds, gpsPoint, frameUrl }) => {
+        setDemoSecondsRemaining(secondsRemaining);
+        setDemoFrameUrl(frameUrl);
+        setCurrentLocation(gpsPoint);
+        setGpsPath((prev) => [...prev, gpsPoint]);
+        setDistanceMeters(Math.round((elapsedSeconds / 30) * 1420));
+        setElapsedSeconds(elapsedSeconds);
+      },
+      onDetection: (defect) => {
+        setIssues((prev) => [defect, ...prev]);
+        setStatusMessage(`DEMO HAZARD DETECTED: ${defect.defectClass} (92%) on NH-65 corridor.`);
+      },
+      onComplete: ({ journey, defects }) => {
+        setDemoActive(false);
+        setPostTripSummary({
+          id: journey.id,
+          distanceMeters: journey.distanceMeters,
+          durationSeconds: journey.durationSeconds,
+          issuesCount: defects.length,
+          isDemo: true
+        });
+        setStatusMessage('Demo scan completed! 2 sample potholes detected along NH-65 Benz Circle.');
+      }
+    });
+
+    demoSessionCancelRef.current = cancelFn;
+  }, [navigateTo]);
+
+  // Unified Start/Stop Road Scan Action
+  const handleStartRoadScan = useCallback(async () => {
+    if (activeJourney || demoActive) {
+      // STOP ROAD SCAN
+      if (demoActive) {
+        if (demoSessionCancelRef.current) {
+          demoSessionCancelRef.current();
+          demoSessionCancelRef.current = null;
+        }
+        setDemoActive(false);
+        setPostTripSummary({
+          id: 'DEMO-TRIP-BENZ-CIRCLE',
+          distanceMeters: distanceMeters,
+          durationSeconds: elapsedSeconds,
+          issuesCount: 2,
+          isDemo: true
+        });
+        setStatusMessage('Demo scan stopped.');
+        return;
+      }
+
+      // Real journey stop
+      try {
+        setStatusMessage('Stopping scan and saving trip dossier...');
+        const finished = await stopJourney(activeJourney.id, {
+          endLatitude: currentLocation?.lat,
+          endLongitude: currentLocation?.lon,
+          distanceMeters: Math.round(distanceMetersRef.current)
+        });
+        setActiveJourney(null);
+        setRecordingStatus('STOPPED');
+        setCameraState('PERMISSION_REQUIRED');
+        setCompletedJourneyBanner(finished);
+        setPostTripSummary({
+          id: finished.id,
+          distanceMeters: finished.distanceMeters || Math.round(distanceMetersRef.current),
+          durationSeconds: elapsedSeconds,
+          issuesCount: finished.issueCount || 0,
+          isDemo: false
+        });
+        setStatusMessage(`Trip #${finished.id} saved: ${finished.totalFrames} frames analyzed, ${finished.issueCount} road defects logged.`);
+        const [iss, jList] = await Promise.all([listIssues().catch(() => []), listJourneys().catch(() => [])]);
+        if (iss) setIssues(iss);
+        if (jList) setJourneysList(jList);
+      } catch (err) {
+        console.error('Could not stop journey:', err);
+        setStatusMessage('Could not stop journey: ' + err.message);
+      }
+    } else {
+      // START ROAD SCAN
+      setCameraState('REQUESTING_PERMISSION');
+      if (!isGpsEnabled && settings.autoGpsTracking !== false) {
+        handleToggleGps();
+      }
+      await handleStartJourney();
+    }
+  }, [activeJourney, demoActive, distanceMeters, elapsedSeconds, isGpsEnabled, settings.autoGpsTracking, currentLocation, handleToggleGps, handleStartJourney]);
+
+  function getHumanFriendlyGpsBadge() {
+    if (!isGpsEnabled) {
+      if (manualLocation) {
+        return { label: 'Manual Pin Active', color: '#2563eb', bg: '#eff6ff' };
+      }
+      return { label: 'GPS Paused (Offline Mode)', color: '#64748b', bg: '#f1f5f9' };
+    }
+    if (gpsStatus === 'GPS CONNECTING') {
+      return { label: 'Connecting to GPS...', color: '#f59e0b', bg: '#fffbeb' };
+    }
+    if (!currentLocation || !isValidCoordinate(currentLocation.lat, currentLocation.lon)) {
+      return { label: 'Waiting for GPS Fix', color: '#f59e0b', bg: '#fffbeb' };
+    }
+    const acc = currentLocation.accuracy || 10;
+    if (acc <= 10) {
+      return { label: `Exact (±${Math.round(acc)}m)`, color: '#059669', bg: '#ecfdf5' };
+    }
+    if (acc <= 30) {
+      return { label: `Fair (±${Math.round(acc)}m)`, color: '#0d9488', bg: '#f0fdfa' };
+    }
+    return { label: `Weak (±${Math.round(acc)}m)`, color: '#f59e0b', bg: '#fffbeb' };
+  }
+
   async function handleRefreshAll() {
     try {
       const iss = await listIssues();
@@ -808,8 +958,8 @@ export default function App() {
         flexWrap: 'wrap',
         gap: '10px'
       }}>
-        {/* Left: Hamburger, Undo/Redo, App Brand, Dynamic Active Section Pill */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        {/* Left: Hamburger, App Brand, 4 Desktop Navigation Workspace Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <button
             onClick={() => setDrawerOpen(true)}
             aria-label="Open navigation menu"
@@ -829,93 +979,6 @@ export default function App() {
             <Menu size={20} />
           </button>
 
-          {/* Section Navigation: History Back & Forward (shown when history exists) */}
-          {historyStack.length > 1 && (
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              background: 'rgba(0, 0, 0, 0.25)',
-              borderRadius: '8px',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              overflow: 'hidden'
-            }}>
-              <button
-                onClick={handleUndo}
-                disabled={historyIndex <= 0}
-                aria-label="Navigate to previous section"
-                title="Go back to previous section"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  borderRight: '1px solid rgba(255, 255, 255, 0.12)',
-                  color: historyIndex > 0 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
-                  cursor: historyIndex > 0 ? 'pointer' : 'not-allowed',
-                  padding: '6px 10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '11px',
-                  fontWeight: 600
-                }}
-              >
-                <ChevronLeft size={14} />
-                <span>Back</span>
-              </button>
-
-              <button
-                onClick={handleRedo}
-                disabled={historyIndex >= historyStack.length - 1}
-                aria-label="Navigate forward"
-                title="Go forward"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: historyIndex < historyStack.length - 1 ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
-                  cursor: historyIndex < historyStack.length - 1 ? 'pointer' : 'not-allowed',
-                  padding: '6px 10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '11px',
-                  fontWeight: 600
-                }}
-              >
-                <span>Forward</span>
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          )}
-
-          {/* Reversible Action Undo Button: Displayed strictly when a real reversible action exists */}
-          {undoableAction && (
-            <button
-              onClick={() => {
-                if (undoableAction && undoableAction.run) {
-                  undoableAction.run();
-                  setUndoableAction(null);
-                }
-              }}
-              aria-label="Undo last reversible action"
-              title="Undo last action"
-              style={{
-                background: 'rgba(239, 68, 68, 0.25)',
-                border: '1px solid #ef4444',
-                color: '#ffffff',
-                padding: '6px 12px',
-                borderRadius: '8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px'
-              }}
-            >
-              <Undo2 size={13} />
-              <span>Undo {undoableAction.label || 'Action'}</span>
-            </button>
-          )}
-
           {/* Brand Logo & Name */}
           <div
             onClick={() => navigateTo('scanner')}
@@ -934,121 +997,143 @@ export default function App() {
             />
             <div>
               <h1 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
-                ROADGUARD <span style={{ color: '#93c5fd' }}>AI</span>
+                ROADGUARD <span style={{ color: '#38bdf8' }}>AI</span>
               </h1>
               <p className="header-subtitle" style={{ margin: 0, fontSize: '10px', color: 'rgba(255, 255, 255, 0.75)' }}>
-                Intelligent Road-Monitoring & Grievance Redressal
+                Civic Clarity Architecture · Andhra Pradesh
               </p>
             </div>
           </div>
 
-          {/* Dynamic Active Section Pill */}
-          {(() => {
-            const currentSectionKey = (activeView === 'dashboard' ? 'scanner' : activeView);
-            const activeConf = SECTION_CONFIG[currentSectionKey] || SECTION_CONFIG.scanner;
-            const IconComp = activeConf.icon;
-            return (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'rgba(255, 255, 255, 0.18)',
-                border: `1.5px solid ${activeConf.color}`,
-                padding: '4px 12px',
-                borderRadius: '999px',
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#ffffff',
-                boxShadow: `0 0 10px ${activeConf.color}50`
-              }}>
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: activeConf.color,
-                  boxShadow: `0 0 6px ${activeConf.color}`
-                }} />
-                <IconComp size={13} color="#ffffff" />
-                <span>{activeConf.title}</span>
-              </div>
-            );
-          })()}
+          {/* 4 Visible Desktop Workspace Tabs (≥768px) */}
+          <div className="desktop-nav-tabs" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }}>
+            {[
+              { id: 'scanner', label: 'Scan Road', icon: Activity },
+              { id: 'journeys-issues', label: 'My Trips & Potholes', icon: Car, badge: issues.length > 0 ? issues.length : null },
+              { id: 'gov-reports', label: 'Official Complaints', icon: FileText },
+              { id: 'profile', label: 'Profile & Settings', icon: UserCheck }
+            ].map(item => {
+              const Icon = item.icon;
+              const isActive = (activeView === item.id) || (item.id === 'scanner' && activeView === 'dashboard') || (item.id === 'profile' && activeView === 'settings');
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => navigateTo(item.id)}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: isActive ? 'var(--color-civic-teal, #0d9488)' : 'rgba(255, 255, 255, 0.08)',
+                    color: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Icon size={14} />
+                  <span>{item.label}</span>
+                  {item.badge && (
+                    <span style={{
+                      background: '#ef4444',
+                      color: '#ffffff',
+                      borderRadius: '999px',
+                      padding: '1px 6px',
+                      fontSize: '10px',
+                      fontWeight: 700
+                    }}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Right: GPS Status, Recording Status & Backend Connectivity Indicator */}
+        {/* Right: Unified System Status Pill, Try Demo Button & Help Modal Trigger */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Real-time GPS Status Indicator */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: 'rgba(0, 0, 0, 0.25)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            padding: '4px 10px',
-            borderRadius: '8px',
-            fontSize: '11px'
-          }}>
-            <div style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              backgroundColor: gpsStatus === 'GPS ACTIVE' ? '#10b981' : (gpsStatus === 'GPS CONNECTING' ? '#f59e0b' : (gpsStatus === 'GPS OFF' ? '#94a3b8' : '#ef4444')),
-              boxShadow: gpsStatus === 'GPS ACTIVE' ? '0 0 8px #10b981' : 'none'
-            }} />
-            <span style={{ color: '#ffffff' }}>
-              GPS: <strong>{gpsStatus}</strong>{currentLocation?.accuracy ? ` (±${Math.round(currentLocation.accuracy)}m)` : ''}
-            </span>
-          </div>
-
-          {/* Recording Status Pill */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: activeJourney ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-            border: `1px solid ${activeJourney ? 'rgba(16, 185, 129, 0.45)' : 'rgba(255, 255, 255, 0.15)'}`,
-            padding: '4px 10px',
-            borderRadius: '999px',
-            fontSize: '11px',
-            fontWeight: 700,
-            color: activeJourney ? '#a7f3d0' : '#e2e8f0'
-          }}>
-            <div style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              backgroundColor: activeJourney ? '#10b981' : '#94a3b8',
-              boxShadow: activeJourney ? '0 0 8px #10b981' : 'none'
-            }} />
-            <span>{activeJourney ? recordingStatus : 'STANDBY'}</span>
-          </div>
-
-          {/* Backend Health Indicator */}
-          <div 
-            onClick={handleRetryBackend}
-            title={backendError ? ("Backend Notice: " + backendError + " (Click to retry)") : "Click to check backend status"}
+          {/* Unified System Status Pill (opens Diagnostics drawer) */}
+          <div
+            onClick={() => setShowDiagnostics(prev => !prev)}
+            title="Click to toggle Subsystem Diagnostics & Telemetry"
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              background: 'rgba(0, 0, 0, 0.25)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              padding: '4px 10px',
-              borderRadius: '8px',
+              background: 'rgba(0, 0, 0, 0.28)',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
+              padding: '6px 12px',
+              borderRadius: '999px',
               fontSize: '11px',
-              cursor: 'pointer'
-            }}>
+              fontWeight: 600,
+              cursor: 'pointer',
+              color: '#ffffff'
+            }}
+          >
             <div style={{
-              width: '7px',
-              height: '7px',
+              width: '8px',
+              height: '8px',
               borderRadius: '50%',
-              backgroundColor: health?.status === 'UP' ? '#10b981' : (isWakingBackend ? '#f59e0b' : '#ef4444'),
-              boxShadow: health?.status === 'UP' ? '0 0 8px #10b981' : (isWakingBackend ? '0 0 8px #f59e0b' : 'none')
+              backgroundColor: activeJourney || demoActive ? '#10b981' : (health?.status === 'UP' ? '#0d9488' : (isWakingBackend ? '#f59e0b' : '#ef4444')),
+              boxShadow: activeJourney || demoActive ? '0 0 8px #10b981' : 'none'
             }} />
-            <span style={{ color: '#ffffff' }}>
-              Backend: <strong>{health?.status === 'UP' ? 'Online' : (isWakingBackend ? 'Waking...' : 'Offline')}</strong>
+            <span>
+              {demoActive
+                ? `DEMO SCANNING (${demoSecondsRemaining}s)`
+                : (activeJourney ? `RECORDING · TRIP #${activeJourney.id}` : (health?.status === 'UP' ? 'System Ready' : (isWakingBackend ? 'Waking Cloud...' : 'Backend Probing')))}
             </span>
           </div>
+
+          {/* Quick 30s Demo Scan CTA */}
+          {!activeJourney && !demoActive && (
+            <button
+              type="button"
+              onClick={handleStartDemoScan}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                boxShadow: '0 2px 8px rgba(13, 148, 136, 0.3)'
+              }}
+            >
+              <Play size={12} fill="#ffffff" /> Try Demo
+            </button>
+          )}
+
+          {/* Help Button */}
+          <button
+            type="button"
+            onClick={() => setAboutOpen(true)}
+            title="Help & Guide"
+            style={{
+              padding: '6px 10px',
+              borderRadius: '8px',
+              background: 'rgba(255, 255, 255, 0.12)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              color: '#ffffff',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <HelpCircle size={14} /> Help
+          </button>
         </div>
       </header>
 
@@ -1088,6 +1173,84 @@ export default function App() {
         {/* VIEW 1: Live Road Scanner Dashboard */}
         {(activeView === 'scanner' || activeView === 'dashboard') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '100%' }}>
+            {/* Welcome Civic Mission Banner (Dismissible) */}
+            {!welcomeDismissed && !activeJourney && !demoActive && (
+              <div className="glass-panel" style={{
+                padding: '16px 20px',
+                background: 'linear-gradient(135deg, rgba(13, 148, 136, 0.12) 0%, rgba(15, 23, 42, 0.04) 100%)',
+                border: '1px solid rgba(13, 148, 136, 0.35)',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '16px',
+                boxShadow: 'var(--shadow-sm)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', maxWidth: '640px' }}>
+                  <div style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: 'var(--color-civic-teal, #0d9488)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 10px rgba(13, 148, 136, 0.3)'
+                  }}>
+                    <Shield size={24} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-bright)' }}>
+                      Spot road damage. Help get it fixed.
+                    </h2>
+                    <p style={{ fontSize: '13px', margin: '4px 0 0', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                      Point your phone at the road while driving. RoadGuard AI spots potholes with on-device computer vision, records exact coordinates, and formats statutory grievances for NHAI, State &amp; Municipal portals.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleStartRoadScan}
+                    className="btn-primary"
+                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                  >
+                    <Play size={14} fill="#ffffff" /> Start Road Scan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStartDemoScan}
+                    className="btn-secondary"
+                    style={{ padding: '8px 14px', fontSize: '13px' }}
+                  >
+                    <Play size={13} /> Try 30s Demo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWelcomeDismissed(true);
+                      try { localStorage.setItem('roadguard_welcome_dismissed', 'true'); } catch (e) {}
+                    }}
+                    aria-label="Dismiss welcome banner"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      padding: '6px',
+                      fontSize: '18px',
+                      lineHeight: 1
+                    }}
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* GPS Signal Warning or Approximate Location Indicator (Non-blocking inline panels) */}
             {currentLocation && currentLocation.accuracy > 50 && (
               <div style={{
@@ -1328,23 +1491,50 @@ export default function App() {
               </div>
             )}
 
-            {/* Integrated Subsystem Diagnostics & Live Telemetry Panel */}
-            <DiagnosticPanel
-              cameraState={cameraState}
-              isJourneyActive={activeJourney != null}
-              activeJourneyId={activeJourney?.id}
-              currentLocation={currentLocation}
-              isGpsEnabled={isGpsEnabled}
-              gpsStatus={gpsStatus}
-              lastGpsFixTime={lastGpsFixTime}
-              gpsPermissionState={gpsPermissionState}
-              gpsErrorMessage={gpsErrorMessage}
-              health={health}
-              backendError={backendError}
-              onRetryBackend={handleRetryBackend}
-              distanceMeters={distanceMeters}
-              elapsedSeconds={elapsedSeconds}
-            />
+            {/* Collapsible Subsystem Diagnostics & Live Telemetry Inspector */}
+            {showDiagnostics && (
+              <div className="glass-panel" style={{
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(13, 148, 136, 0.4)',
+                background: 'var(--bg-card)',
+                boxShadow: 'var(--shadow-md)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: 'var(--text-bright)' }}>
+                    <Activity size={16} color="#0d9488" />
+                    <span>Subsystem Diagnostics &amp; Live Telemetry Inspector</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDiagnostics(false)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '18px' }}
+                    title="Close diagnostics panel"
+                  >
+                    &times;
+                  </button>
+                </div>
+                <DiagnosticPanel
+                  cameraState={cameraState}
+                  isJourneyActive={activeJourney != null || demoActive}
+                  activeJourneyId={activeJourney?.id || (demoActive ? 'DEMO-TRIP' : null)}
+                  currentLocation={currentLocation}
+                  isGpsEnabled={isGpsEnabled}
+                  gpsStatus={gpsStatus}
+                  lastGpsFixTime={lastGpsFixTime}
+                  gpsPermissionState={gpsPermissionState}
+                  gpsErrorMessage={gpsErrorMessage}
+                  health={health}
+                  backendError={backendError}
+                  onRetryBackend={handleRetryBackend}
+                  distanceMeters={distanceMeters}
+                  elapsedSeconds={elapsedSeconds}
+                />
+              </div>
+            )}
 
             {/* Field-Test Driver Safety Advisory */}
             <div style={{
@@ -1379,173 +1569,219 @@ export default function App() {
               </span>
             </div>
 
-            {/* Control Bar: Vehicle selection and start/stop drive mode */}
-            <div className="glass-panel" style={{
-              padding: '14px 18px',
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '14px'
-            }}>
-              {/* Vehicle Type Selection */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>VEHICLE:</span>
-                  {[
-                    { id: 'CAR', icon: Car, label: 'Car' },
-                    { id: 'BIKE', icon: Bike, label: 'Bike' },
-                    { id: 'TRUCK', icon: Truck, label: 'Heavy/Truck' },
-                  ].map((v) => {
-                    const Icon = v.icon;
-                    const active = vehicleType === v.id;
-                    return (
+            {/* Control Bar: Unified Primary Action, Vehicle selection and Telemetry Controls */}
+            {(() => {
+              const gpsBadge = getHumanFriendlyGpsBadge();
+              const isScanningActive = activeJourney != null || demoActive;
+              return (
+                <div className="glass-panel" style={{
+                  padding: '14px 18px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '14px'
+                }}>
+                  {/* Left: Primary Start/Stop CTA, Vehicle Type & GPS Badge */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px' }}>
+                    {/* Unified Primary Action Button */}
+                    <button
+                      type="button"
+                      onClick={handleStartRoadScan}
+                      className={isScanningActive ? 'btn-danger' : 'btn-primary'}
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isScanningActive ? (
+                        <>
+                          <Square size={14} fill="currentColor" /> Stop Road Scan
+                        </>
+                      ) : (
+                        <>
+                          <Play size={14} fill="currentColor" /> Start Road Scan
+                        </>
+                      )}
+                    </button>
+
+                    {/* Vehicle Type Selection */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>VEHICLE:</span>
+                      {[
+                        { id: 'CAR', icon: Car, label: 'Car' },
+                        { id: 'BIKE', icon: Bike, label: 'Bike' },
+                        { id: 'TRUCK', icon: Truck, label: 'Heavy/Truck' },
+                      ].map((v) => {
+                        const Icon = v.icon;
+                        const active = vehicleType === v.id;
+                        return (
+                          <button
+                            key={v.id}
+                            disabled={isScanningActive}
+                            onClick={() => setVehicleType(v.id)}
+                            style={{
+                              padding: '6px 10px',
+                              background: active ? 'rgba(13, 148, 136, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                              color: active ? '#0d9488' : '#94a3b8',
+                              border: `1px solid ${active ? '#0d9488' : 'rgba(255, 255, 255, 0.08)'}`,
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              cursor: isScanningActive ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Icon size={14} /> {v.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Human-Friendly GPS Badge */}
+                    <div
+                      onClick={handleToggleGps}
+                      title="Click to toggle GPS Tracking mode"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '5px 12px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        background: gpsBadge.bg,
+                        color: gpsBadge.color,
+                        border: `1px solid ${gpsBadge.color}40`,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Navigation size={12} />
+                      <span>{gpsBadge.label}</span>
+                    </div>
+                  </div>
+
+                  {/* Right: Camera toggle, Diagnostics pill, GPS toggle & Status summary */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
+                      {activeJourney
+                        ? `Trip #${activeJourney.id} • ${formatDistance(distanceMeters)} • ${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')}${isGpsEnabled && currentLocation ? ` • Acc: ±${(currentLocation?.accuracy || 0).toFixed(0)}m` : ' • Offline GPS'}`
+                        : (demoActive ? `Demo Scan (${demoSecondsRemaining}s) • ${formatDistance(distanceMeters)}` : statusMessage)}
+                    </span>
+
+                    {/* Camera Toggle Control */}
+                    <button
+                      type="button"
+                      onClick={handleToggleCamera}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: cameraState === 'CAMERA_READY' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(13, 148, 136, 0.18)',
+                        border: `1px solid ${cameraState === 'CAMERA_READY' ? '#ef4444' : '#0d9488'}`,
+                        color: cameraState === 'CAMERA_READY' ? '#fca5a5' : '#0d9488',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title={cameraState === 'CAMERA_READY' ? 'Stop Camera Stream' : 'Start Camera Stream'}
+                    >
+                      {cameraState === 'CAMERA_READY' ? (
+                        <>
+                          <Square size={12} fill="#ef4444" /> Stop Camera
+                        </>
+                      ) : (
+                        <>
+                          <Camera size={14} /> Start Camera
+                        </>
+                      )}
+                    </button>
+
+                    {/* Subsystem Diagnostics Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setShowDiagnostics(prev => !prev)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: showDiagnostics ? 'rgba(13, 148, 136, 0.22)' : 'rgba(255, 255, 255, 0.06)',
+                        border: `1px solid ${showDiagnostics ? '#0d9488' : 'rgba(148, 163, 184, 0.25)'}`,
+                        color: showDiagnostics ? '#0d9488' : '#cbd5e1'
+                      }}
+                      title="Toggle Diagnostics & Telemetry Inspector"
+                    >
+                      <Activity size={13} />
+                      <span>Diagnostics</span>
+                    </button>
+
+                    {/* GPS ON/OFF Toggle Control */}
+                    <button
+                      type="button"
+                      onClick={handleToggleGps}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: isGpsEnabled ? 'rgba(56, 189, 248, 0.18)' : 'rgba(100, 116, 139, 0.15)',
+                        border: `1px solid ${isGpsEnabled ? '#38bdf8' : 'rgba(148, 163, 184, 0.3)'}`,
+                        color: isGpsEnabled ? '#38bdf8' : '#94a3b8',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title={isGpsEnabled ? 'Turn GPS Tracking OFF' : 'Turn GPS Tracking ON'}
+                    >
+                      <Navigation size={13} style={{ transform: isGpsEnabled ? 'none' : 'rotate(45deg)' }} />
+                      <span>GPS: {isGpsEnabled ? 'ON' : 'OFF'}</span>
+                    </button>
+
+                    {/* Optional Demo Location Toggle (when real GPS is off) */}
+                    {!isGpsEnabled && !activeJourney && !demoActive && (
                       <button
-                        key={v.id}
-                        disabled={activeJourney != null}
-                        onClick={() => setVehicleType(v.id)}
+                        type="button"
+                        onClick={currentLocation?.isDemo ? handleClearDemoLocation : handleUseDemoLocation}
                         style={{
-                          padding: '6px 10px',
-                          background: active ? 'rgba(0, 245, 160, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                          color: active ? '#00f5a0' : '#94a3b8',
-                          border: `1px solid ${active ? 'rgba(0, 245, 160, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
-                          borderRadius: '6px',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
                           fontSize: '12px',
-                          cursor: activeJourney ? 'not-allowed' : 'pointer',
+                          fontWeight: 600,
+                          cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px'
+                          gap: '6px',
+                          background: currentLocation?.isDemo ? 'rgba(245, 158, 11, 0.18)' : 'rgba(255, 255, 255, 0.06)',
+                          border: `1px solid ${currentLocation?.isDemo ? '#f59e0b' : 'rgba(148, 163, 184, 0.25)'}`,
+                          color: currentLocation?.isDemo ? '#f59e0b' : '#cbd5e1'
                         }}
+                        title="Toggle Demo location (Vijayawada) for interface walkthroughs"
                       >
-                        <Icon size={14} /> {v.label}
+                        <MapPin size={13} />
+                        <span>{currentLocation?.isDemo ? 'Demo Location' : 'Demo Loc'}</span>
                       </button>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    background: isGpsEnabled ? 'rgba(0, 245, 160, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                    color: isGpsEnabled ? '#00f5a0' : '#f59e0b',
-                    border: `1px solid ${isGpsEnabled ? 'rgba(0, 245, 160, 0.25)' : 'rgba(245, 158, 11, 0.3)'}`
-                  }}>
-                    {isGpsEnabled ? 'OPERATING SOURCE: LIVE CAMERA + GPS' : 'OPERATING SOURCE: CAMERA AI (GPS OFF - MANUAL LOCATION)'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons: Camera toggle, GPS toggle & Start/Stop Drive Mode */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '12px', color: '#cbd5e1' }}>
-                  {activeJourney
-                    ? `Journey #${activeJourney.id} • ${formatDistance(distanceMeters)} • ${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')}${isGpsEnabled && currentLocation ? ` • Acc: ±${(currentLocation?.accuracy || 0).toFixed(0)}m` : ' • Offline GPS'}`
-                    : statusMessage}
-                </span>
-
-                {/* GPS ON/OFF Toggle Control */}
-                <button
-                  type="button"
-                  onClick={handleToggleGps}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: isGpsEnabled ? 'rgba(56, 189, 248, 0.18)' : 'rgba(100, 116, 139, 0.15)',
-                    border: `1px solid ${isGpsEnabled ? '#38bdf8' : 'rgba(148, 163, 184, 0.3)'}`,
-                    color: isGpsEnabled ? '#38bdf8' : '#94a3b8',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title={isGpsEnabled ? 'Turn GPS Tracking OFF' : 'Turn GPS Tracking ON'}
-                >
-                  <Navigation size={14} style={{ transform: isGpsEnabled ? 'none' : 'rotate(45deg)' }} />
-                  GPS: {isGpsEnabled ? 'ON' : 'OFF'}
-                </button>
-
-                {/* Optional Prototype Demo Location Toggle (Available when real satellite fix is not active) */}
-                {!isGpsEnabled && (
-                  <button
-                    type="button"
-                    onClick={currentLocation?.isDemo ? handleClearDemoLocation : handleUseDemoLocation}
-                    style={{
-                      padding: '8px 14px',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      background: currentLocation?.isDemo ? 'rgba(245, 158, 11, 0.18)' : 'rgba(255, 255, 255, 0.06)',
-                      border: `1px solid ${currentLocation?.isDemo ? '#f59e0b' : 'rgba(148, 163, 184, 0.25)'}`,
-                      color: currentLocation?.isDemo ? '#f59e0b' : '#cbd5e1',
-                      transition: 'all 0.15s ease'
-                    }}
-                    title="Toggle Demo location (Vijayawada) for interface walkthroughs without satellite lock"
-                  >
-                    <MapPin size={14} />
-                    {currentLocation?.isDemo ? 'Demo Active' : 'Use Demo Location'}
-                  </button>
-                )}
-
-                {/* Always Accessible Camera Toggle Control */}
-                <button
-                  type="button"
-                  onClick={handleToggleCamera}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: cameraState === 'CAMERA_READY' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(0, 245, 160, 0.15)',
-                    border: `1px solid ${cameraState === 'CAMERA_READY' ? '#ef4444' : 'rgba(0, 245, 160, 0.4)'}`,
-                    color: cameraState === 'CAMERA_READY' ? '#fca5a5' : '#00f5a0',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title={cameraState === 'CAMERA_READY' ? 'Stop Camera Stream' : 'Start Camera Stream'}
-                >
-                  {cameraState === 'CAMERA_READY' ? (
-                    <>
-                      <Square size={12} fill="#ef4444" /> Stop Camera
-                    </>
-                  ) : (
-                    <>
-                      <Camera size={14} /> Start Camera
-                    </>
-                  )}
-                </button>
-
-                {activeJourney ? (
-                  <button
-                    onClick={handleStopJourney}
-                    className="btn-danger"
-                    style={{ padding: '10px 20px', borderRadius: '8px' }}
-                  >
-                    <Square size={16} fill="white" /> Stop Drive Mode
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleStartJourney}
-                    className="btn-primary"
-                    style={{ padding: '10px 20px', borderRadius: '8px' }}
-                  >
-                    <Play size={16} fill="#04121d" /> Start Drive Mode
-                  </button>
-                )}
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Split Grid: Camera Viewfinder & Interactive Map */}
             <div className="dashboard-split-grid" style={{
@@ -1565,7 +1801,7 @@ export default function App() {
                   alignItems: 'center'
                 }}>
                   <span style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Activity size={15} color="#00f5a0" /> Live Road Camera & ONNX Defect Vision
+                    <Activity size={15} color="#00f5a0" /> Live Road Camera &amp; ONNX Defect Vision
                   </span>
                   <span style={{
                     padding: '2px 8px',
@@ -1581,8 +1817,8 @@ export default function App() {
                 </div>
                 <div style={{ flex: 1, position: 'relative' }}>
                   <CameraViewfinder
-                    isJourneyActive={activeJourney != null}
-                    journeyId={activeJourney?.id}
+                    isJourneyActive={activeJourney != null || demoActive}
+                    journeyId={activeJourney?.id || (demoActive ? 'DEMO-TRIP' : null)}
                     currentLocation={currentLocation || manualLocation}
                     onNewDetection={handleRefreshAll}
                     settings={settings}
@@ -1590,6 +1826,10 @@ export default function App() {
                     cameraState={cameraState}
                     onCameraStateChange={setCameraState}
                     onFileGrievance={(issue) => setSelectedIssue(issue)}
+                    demoActive={demoActive}
+                    demoSecondsRemaining={demoSecondsRemaining}
+                    demoFrameUrl={demoFrameUrl}
+                    onStartDemo={handleStartDemoScan}
                   />
                 </div>
               </div>
@@ -1618,11 +1858,57 @@ export default function App() {
                     path={gpsPath}
                     issues={issues}
                     onSelectIssue={(issue) => setSelectedIssue(issue)}
-                    isJourneyActive={activeJourney != null}
+                    isJourneyActive={activeJourney != null || demoActive}
                     gpsError={gpsErrorMessage}
                     onRetryGps={handleRetryGps}
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* 3-Line Live Scan Activity Ticker */}
+            <div className="glass-panel" style={{
+              padding: '12px 18px',
+              borderRadius: '10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              background: 'var(--bg-card)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-bright)', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700 }}>
+                  <Activity size={14} color="var(--color-civic-teal, #0d9488)" />
+                  <span>Vision AI Engine:</span>
+                  <span style={{ color: demoActive ? '#38bdf8' : (health?.modelStatus === 'LOADED' ? '#059669' : '#0d9488'), fontWeight: 600 }}>
+                    {demoActive ? 'Demo Synthetic Highway Stream Active (NH-65 Vijayawada)' : (health?.modelStatus === 'LOADED' ? 'ONNX YOLO11s Active (Local Edge Inference · Conf >= 0.25)' : 'ONNX Local Detector Ready')}
+                  </span>
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Pure Java Backend &bull; RL Policy Engine
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-dim)', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                  <Navigation size={13} color="#38bdf8" />
+                  <span style={{ fontWeight: 600 }}>Geospatial Corridor:</span>
+                  <span>
+                    {currentLocation && isValidCoordinate(currentLocation.lat, currentLocation.lon)
+                      ? `${formatCoordinate(currentLocation.lat)}, ${formatCoordinate(currentLocation.lon)} (±${Math.round(currentLocation.accuracy || 10)}m) · ${gpsPath.length} genuine fixes`
+                      : (manualLocation ? `Manual Pin: ${formatCoordinate(manualLocation.lat)}, ${formatCoordinate(manualLocation.lon)}` : 'Camera inference unhindered in GPS-independent mode')}
+                  </span>
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Deduplication Radius: 15m
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                <Sparkles size={12} color="#f59e0b" />
+                <span style={{ fontWeight: 600 }}>Event Stream:</span>
+                <span style={{ color: 'var(--text-dim)' }}>
+                  {statusMessage}
+                </span>
               </div>
             </div>
 
@@ -1781,6 +2067,178 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Mobile Fixed Bottom Navigation Bar (<768px) */}
+      <nav className="mobile-bottom-nav">
+        {[
+          { id: 'scanner', label: 'Scan Road', icon: Activity },
+          { id: 'journeys-issues', label: 'My Trips', icon: Car, badge: issues.length > 0 ? issues.length : null },
+          { id: 'gov-reports', label: 'Complaints', icon: FileText },
+          { id: 'profile', label: 'Profile', icon: UserCheck }
+        ].map((item) => {
+          const Icon = item.icon;
+          const isActive = (activeView === item.id) || (item.id === 'scanner' && activeView === 'dashboard') || (item.id === 'profile' && activeView === 'settings');
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`mobile-bottom-nav-btn ${isActive ? 'active' : ''}`}
+              onClick={() => navigateTo(item.id)}
+            >
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon size={18} />
+                {item.badge && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-8px',
+                    background: '#ef4444',
+                    color: '#ffffff',
+                    fontSize: '9px',
+                    fontWeight: 800,
+                    borderRadius: '999px',
+                    padding: '1px 4px',
+                    lineHeight: 1
+                  }}>
+                    {item.badge}
+                  </span>
+                )}
+              </div>
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Post-Trip Summary Modal */}
+      {postTripSummary && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.72)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 2000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            maxWidth: '480px',
+            width: '100%',
+            background: 'var(--bg-card)',
+            borderRadius: '16px',
+            padding: '24px',
+            boxShadow: 'var(--shadow-lg)',
+            border: '1px solid var(--border-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  background: 'rgba(13, 148, 136, 0.15)',
+                  color: 'var(--color-civic-teal, #0d9488)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <CheckCircle2 size={24} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--text-bright)' }}>
+                    {postTripSummary.isDemo ? 'Demo Scan Completed' : 'Trip Successfully Saved'}
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
+                    {postTripSummary.isDemo ? 'Interactive 30s Walkthrough along NH-65' : `Trip #${postTripSummary.id}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPostTripSummary(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer' }}
+                title="Dismiss summary"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Metrics Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '10px',
+              padding: '12px',
+              background: 'rgba(0, 0, 0, 0.04)',
+              borderRadius: '10px'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>DISTANCE</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-bright)', marginTop: '2px' }}>
+                  {formatDistance(postTripSummary.distanceMeters || 0)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>DURATION</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-bright)', marginTop: '2px' }}>
+                  {Math.floor(postTripSummary.durationSeconds / 60)}m {postTripSummary.durationSeconds % 60}s
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>HAZARDS</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: postTripSummary.issuesCount > 0 ? '#ef4444' : '#059669', marginTop: '2px' }}>
+                  {postTripSummary.issuesCount}
+                </div>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0, lineHeight: 1.4 }}>
+              {postTripSummary.issuesCount > 0
+                ? `${postTripSummary.issuesCount} road hazards were identified and geotagged. You can inspect the photographic evidence in your trip dossier or prepare a grievance for submission to the road authority.`
+                : 'Your journey was safely recorded with zero potholes detected on this stretch.'}
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  const tripId = postTripSummary.id;
+                  setPostTripSummary(null);
+                  if (tripId && !postTripSummary.isDemo) {
+                    setSelectedReportId(tripId);
+                  }
+                  navigateTo('journeys-issues');
+                }}
+                style={{ padding: '8px 14px', fontSize: '13px' }}
+              >
+                Inspect Trip Dossier
+              </button>
+              {postTripSummary.issuesCount > 0 && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    setPostTripSummary(null);
+                    navigateTo('gov-reports');
+                  }}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Prepare Grievance &rarr;
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. Grievance Modal */}
       {selectedIssue && (
