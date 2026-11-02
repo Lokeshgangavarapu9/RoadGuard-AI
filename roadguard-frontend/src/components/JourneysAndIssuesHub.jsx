@@ -29,7 +29,6 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet'
 import L from 'leaflet';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { jsPDF } from 'jspdf';
 import { getJourney, getJourneyGps, getJourneyFrames, listIssues, deleteJourney } from '../api';
 import { isValidCoordinate } from '../utils/geoUtils';
 import { DEMO_SAMPLE_DEFECTS } from '../utils/demoScan';
@@ -238,14 +237,16 @@ export default function JourneysAndIssuesHub({
     };
   }, [viewDimension, gpsPoints]);
 
-  // Export PDF Dossier
-  function handleExportPDF() {
+  // Export PDF Dossier (dynamically loaded on demand)
+  async function handleExportPDF() {
     if (!journeyData) return;
-    const doc = new jsPDF();
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.setTextColor(30, 58, 138); // Civic Navy
-    doc.text('RoadGuard AI — Road Inspection Dossier', 14, 20);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(30, 58, 138); // Civic Navy
+      doc.text('RoadGuard AI — Road Inspection Dossier', 14, 20);
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
@@ -278,6 +279,11 @@ export default function JourneysAndIssuesHub({
     });
 
     doc.save(`RoadGuard_Journey_${journeyData.id}_Audit_Report.pdf`);
+    } catch (err) {
+      console.error('Failed to load PDF export module:', err);
+      setStatusNotification('Could not generate PDF dossier: ' + err.message);
+      setTimeout(() => setStatusNotification(null), 3000);
+    }
   }
 
   async function handleDeleteJourney(e, journeyId) {

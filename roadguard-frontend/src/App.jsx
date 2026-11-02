@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import {
   Shield,
   Menu,
@@ -32,14 +32,23 @@ import {
 } from 'lucide-react';
 import MapViewer from './components/MapViewer';
 import CameraViewfinder from './components/CameraViewfinder';
-import DiagnosticPanel from './components/DiagnosticPanel';
-import GrievanceModal from './components/GrievanceModal';
 import NavigationDrawer from './components/NavigationDrawer';
-import JourneysAndIssuesHub from './components/JourneysAndIssuesHub';
-import GovernmentReportsView from './components/GovernmentReportsView';
-import ProfileView from './components/ProfileView';
-import SettingsView from './components/SettingsView';
-import HelpAboutModal from './components/HelpAboutModal';
+
+// Route-based & on-demand code-split components for optimal bundle performance
+const DiagnosticPanel = lazy(() => import('./components/DiagnosticPanel'));
+const GrievanceModal = lazy(() => import('./components/GrievanceModal'));
+const JourneysAndIssuesHub = lazy(() => import('./components/JourneysAndIssuesHub'));
+const GovernmentReportsView = lazy(() => import('./components/GovernmentReportsView'));
+const ProfileView = lazy(() => import('./components/ProfileView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const HelpAboutModal = lazy(() => import('./components/HelpAboutModal'));
+
+const WorkspaceLoading = () => (
+  <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-dim, #64748b)' }}>
+    <div className="spin" style={{ display: 'inline-block', width: '28px', height: '28px', border: '3px solid rgba(13, 148, 136, 0.2)', borderTopColor: 'var(--color-civic-teal, #0d9488)', borderRadius: '50%', marginBottom: '14px' }} />
+    <div style={{ fontSize: '13px', fontWeight: 600 }}>Loading workspace view...</div>
+  </div>
+);
 import {
   getHealth,
   getStats,
@@ -1517,22 +1526,24 @@ export default function App() {
                     &times;
                   </button>
                 </div>
-                <DiagnosticPanel
-                  cameraState={cameraState}
-                  isJourneyActive={activeJourney != null || demoActive}
-                  activeJourneyId={activeJourney?.id || (demoActive ? 'DEMO-TRIP' : null)}
-                  currentLocation={currentLocation}
-                  isGpsEnabled={isGpsEnabled}
-                  gpsStatus={gpsStatus}
-                  lastGpsFixTime={lastGpsFixTime}
-                  gpsPermissionState={gpsPermissionState}
-                  gpsErrorMessage={gpsErrorMessage}
-                  health={health}
-                  backendError={backendError}
-                  onRetryBackend={handleRetryBackend}
-                  distanceMeters={distanceMeters}
-                  elapsedSeconds={elapsedSeconds}
-                />
+                <Suspense fallback={<div style={{ padding: '12px', fontSize: '12px', color: 'var(--text-dim)' }}>Loading telemetry diagnostics...</div>}>
+                  <DiagnosticPanel
+                    cameraState={cameraState}
+                    isJourneyActive={activeJourney != null || demoActive}
+                    activeJourneyId={activeJourney?.id || (demoActive ? 'DEMO-TRIP' : null)}
+                    currentLocation={currentLocation}
+                    isGpsEnabled={isGpsEnabled}
+                    gpsStatus={gpsStatus}
+                    lastGpsFixTime={lastGpsFixTime}
+                    gpsPermissionState={gpsPermissionState}
+                    gpsErrorMessage={gpsErrorMessage}
+                    health={health}
+                    backendError={backendError}
+                    onRetryBackend={handleRetryBackend}
+                    distanceMeters={distanceMeters}
+                    elapsedSeconds={elapsedSeconds}
+                  />
+                </Suspense>
               </div>
             )}
 
@@ -2011,60 +2022,68 @@ export default function App() {
 
         {/* VIEW 2: Journeys & Road Issues Consolidated Hub */}
         {activeView === 'journeys-issues' && (
-          <JourneysAndIssuesHub
-            journeys={journeysList}
-            issues={issues}
-            selectedJourneyId={selectedReportId}
-            onSelectJourney={(j) => setSelectedReportId(j?.id || j)}
-            onRefresh={handleRefreshAll}
-            onSelectIssue={(issue) => setSelectedIssue(issue)}
-            onViewOnMap={(loc) => {
-              setCurrentLocation({
-                lat: loc.latitude,
-                lon: loc.longitude,
-                speed: 0,
-                heading: 0,
-                accuracy: loc.locationAccuracyM || 5
-              });
-              navigateTo('scanner');
-              setStatusMessage(`Viewing defect on map.`);
-            }}
-          />
+          <Suspense fallback={<WorkspaceLoading />}>
+            <JourneysAndIssuesHub
+              journeys={journeysList}
+              issues={issues}
+              selectedJourneyId={selectedReportId}
+              onSelectJourney={(j) => setSelectedReportId(j?.id || j)}
+              onRefresh={handleRefreshAll}
+              onSelectIssue={(issue) => setSelectedIssue(issue)}
+              onViewOnMap={(loc) => {
+                setCurrentLocation({
+                  lat: loc.latitude,
+                  lon: loc.longitude,
+                  speed: 0,
+                  heading: 0,
+                  accuracy: loc.locationAccuracyM || 5
+                });
+                navigateTo('scanner');
+                setStatusMessage(`Viewing defect on map.`);
+              }}
+            />
+          </Suspense>
         )}
 
         {/* VIEW 3: Government Reports Hub */}
         {activeView === 'gov-reports' && (
-          <GovernmentReportsView
-            issues={issues}
-            journeys={journeysList}
-            onNavigateToScanner={() => navigateTo('scanner')}
-            onSelectComplaint={(complaint) => {
-              // Complaint preview
-            }}
-          />
+          <Suspense fallback={<WorkspaceLoading />}>
+            <GovernmentReportsView
+              issues={issues}
+              journeys={journeysList}
+              onNavigateToScanner={() => navigateTo('scanner')}
+              onSelectComplaint={(complaint) => {
+                // Complaint preview
+              }}
+            />
+          </Suspense>
         )}
 
         {/* VIEW 4: My Profile & Connected Services View */}
         {activeView === 'profile' && (
-          <ProfileView
-            currentLocation={currentLocation}
-            onProfileUpdated={(updated) => {
-              if (updated.fullName) setRiderName(updated.fullName);
-              if (updated.email) setRiderEmail(updated.email);
-              if (updated.vehicleType) setVehicleType(updated.vehicleType);
-            }}
-          />
+          <Suspense fallback={<WorkspaceLoading />}>
+            <ProfileView
+              currentLocation={currentLocation}
+              onProfileUpdated={(updated) => {
+                if (updated.fullName) setRiderName(updated.fullName);
+                if (updated.email) setRiderEmail(updated.email);
+                if (updated.vehicleType) setVehicleType(updated.vehicleType);
+              }}
+            />
+          </Suspense>
         )}
 
         {/* VIEW 5: Settings View */}
         {activeView === 'settings' && (
-          <SettingsView
-            health={health}
-            stats={stats}
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
-            onResetSession={handleResetSession}
-          />
+          <Suspense fallback={<WorkspaceLoading />}>
+            <SettingsView
+              health={health}
+              stats={stats}
+              settings={settings}
+              onUpdateSettings={handleUpdateSettings}
+              onResetSession={handleResetSession}
+            />
+          </Suspense>
         )}
       </main>
 
@@ -2242,18 +2261,24 @@ export default function App() {
 
       {/* 4. Grievance Modal */}
       {selectedIssue && (
-        <GrievanceModal
-          issue={selectedIssue}
-          onClose={() => setSelectedIssue(null)}
-          onComplaintSubmitted={() => handleRefreshAll()}
-        />
+        <Suspense fallback={null}>
+          <GrievanceModal
+            issue={selectedIssue}
+            onClose={() => setSelectedIssue(null)}
+            onComplaintSubmitted={() => handleRefreshAll()}
+          />
+        </Suspense>
       )}
 
       {/* 5. Help & About Modal */}
-      <HelpAboutModal
-        isOpen={aboutOpen}
-        onClose={() => setAboutOpen(false)}
-      />
+      {aboutOpen && (
+        <Suspense fallback={null}>
+          <HelpAboutModal
+            isOpen={aboutOpen}
+            onClose={() => setAboutOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
